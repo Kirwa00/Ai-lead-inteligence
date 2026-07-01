@@ -77,8 +77,8 @@ const config: Config = {
         unit: "4px",
       },
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
-        mono: ["'JetBrains Mono'", "monospace"],
+        sans: ["var(--font-inter)", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "JetBrains Mono", "ui-monospace", "monospace"],
       },
       fontSize: {
         "display-lg": ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" }],

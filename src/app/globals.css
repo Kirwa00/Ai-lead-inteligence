@@ -2,20 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap');
-
 :root {
   color-scheme: dark;
 }
 
 html {
-  background: #0b1326;
+  background-color: #0b1326;
 }
 
 body {
-  background: #0b1326;
+  background-color: #0b1326;
   color: #dae2fd;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-inter, 'Inter', sans-serif);
 }
 
 /* Custom scrollbar */
@@ -38,6 +36,6 @@ body {
 
 @layer utilities {
   .font-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
   }
 }

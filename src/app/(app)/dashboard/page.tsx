@@ -1,11 +1,11 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-
-export const dynamic = "force-dynamic";
 import KpiCard from "@/components/ui/KpiCard";
 import AgentStatusCard from "@/components/ui/AgentStatusCard";
 import LeadGrowthChart from "@/components/ui/LeadGrowthChart";
 import ActiveCampaignsList from "@/components/ui/ActiveCampaignsList";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -62,7 +62,15 @@ export default async function DashboardPage() {
     name: c.name,
     leads: c.leads.length,
     status: c.status,
-    progress: c.leads.length > 0 ? Math.min(100, Math.round((c.leads.filter((l) => l.status !== "uncontacted").length / c.leads.length) * 100)) : 0,
+    progress:
+      c.leads.length > 0
+        ? Math.min(
+            100,
+            Math.round(
+              (c.leads.filter((l) => l.status !== "uncontacted").length / c.leads.length) * 100
+            )
+          )
+        : 0,
   }));
 
   return (
@@ -105,7 +113,9 @@ export default async function DashboardPage() {
                 name={agent.name}
                 status={agent.status as "active" | "idle" | "paused" | "error"}
                 tasksCompleted={agent.tasksTotal}
-                currentTask={(agent.config as { currentTask?: string } | null)?.currentTask ?? "Awaiting tasks"}
+                currentTask={
+                  (agent.config as { currentTask?: string } | null)?.currentTask ?? "Awaiting tasks"
+                }
               />
             ))}
           </div>
