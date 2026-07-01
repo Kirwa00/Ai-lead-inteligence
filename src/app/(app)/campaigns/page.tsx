@@ -2,6 +2,8 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const statusBadge: Record<string, string> = {
   active: "text-primary bg-primary/10 border-primary/20",
   paused: "text-secondary bg-secondary/10 border-secondary/20",

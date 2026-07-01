@@ -1,6 +1,8 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const statusBadge: Record<string, string> = {
   qualified: "text-primary bg-primary/10 border-primary/20",
   contacted: "text-secondary bg-secondary/10 border-secondary/20",

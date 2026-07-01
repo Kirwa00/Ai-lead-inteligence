@@ -1,6 +1,8 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export default async function ReportsPage() {
   const session = await auth();
   const orgId = (session?.user as { organizationId?: string } | undefined)?.organizationId;

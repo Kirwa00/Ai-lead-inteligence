@@ -1,5 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
 import KpiCard from "@/components/ui/KpiCard";
 import AgentStatusCard from "@/components/ui/AgentStatusCard";
 import LeadGrowthChart from "@/components/ui/LeadGrowthChart";

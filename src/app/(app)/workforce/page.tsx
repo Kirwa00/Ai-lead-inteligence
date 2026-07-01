@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const agentMeta: Record<
   string,
   { icon: string; accuracy: string; avgLatency: string; currentTask: string; description: string; capabilities: string[] }

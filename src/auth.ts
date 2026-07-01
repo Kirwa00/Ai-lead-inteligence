@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
+import { authConfig } from "@/auth.config";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -10,6 +11,7 @@ const loginSchema = z.object({
 });
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       async authorize(credentials) {
@@ -44,24 +46,4 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) {
-        const u = user as { role?: string; organizationId?: string };
-        token.role = u.role;
-        token.organizationId = u.organizationId;
-      }
-      return token;
-    },
-    session({ session, token }) {
-      if (session.user) {
-        const u = session.user as { role?: unknown; organizationId?: unknown };
-        u.role = token.role;
-        u.organizationId = token.organizationId;
-      }
-      return session;
-    },
-  },
-  pages: { signIn: "/login" },
-  session: { strategy: "jwt" },
 });
