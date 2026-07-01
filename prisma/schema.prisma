@@ -1,0 +1,204 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  plan        String       @default("free")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  users       User[]
+  campaigns   Campaign[]
+  integrations Integration[]
+  logs        ActivityLog[]
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  name           String?
+  role           String       @default("member")
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Campaign {
+  id             String       @id @default(cuid())
+  name           String
+  goal           String?
+  description    String?
+  status         String       @default("draft")
+  industry       String?
+  geography      String?
+  companySize    String?
+  targetTitles   String[]
+  keywords       String[]
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leads          Lead[]
+  workflows      Workflow[]
+  emails         Email[]
+  reports        Report[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model Company {
+  id          String    @id @default(cuid())
+  name        String
+  domain      String?   @unique
+  industry    String?
+  size        String?
+  country     String?
+  city        String?
+  description String?
+  website     String?
+  linkedinUrl String?
+  revenue     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  contacts    Contact[]
+  leads       Lead[]
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  firstName   String
+  lastName    String
+  title       String?
+  email       String?
+  emailStatus String?
+  phone       String?
+  linkedinUrl String?
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  leads       Lead[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Lead {
+  id          String   @id @default(cuid())
+  score       Int      @default(0)
+  status      String   @default("uncontacted")
+  campaignId  String
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id])
+  activities  LeadActivity[]
+  emails      Email[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model LeadActivity {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type      String
+  note      String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model Email {
+  id         String   @id @default(cuid())
+  subject    String
+  body       String
+  status     String   @default("draft")
+  sentAt     DateTime?
+  openedAt   DateTime?
+  repliedAt  DateTime?
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  leadId     String?
+  lead       Lead?    @relation(fields: [leadId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model AIAgent {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  status      String   @default("idle")
+  config      Json?
+  tasksTotal  Int      @default(0)
+  tasksFailed Int      @default(0)
+  tasks       AITask[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AITask {
+  id          String   @id @default(cuid())
+  agentId     String
+  agent       AIAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  workflowId  String?
+  workflow    Workflow? @relation(fields: [workflowId], references: [id])
+  type        String
+  status      String   @default("pending")
+  input       Json?
+  output      Json?
+  errorMsg    String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+}
+
+model Workflow {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  status     String   @default("pending")
+  currentStep Int     @default(0)
+  totalSteps  Int     @default(12)
+  tasks      AITask[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  name       String
+  type       String
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  data       Json?
+  createdAt  DateTime @default(now())
+}
+
+model Integration {
+  id             String       @id @default(cuid())
+  provider       String
+  status         String       @default("disconnected")
+  config         Json?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([provider, organizationId])
+}
+
+model ActivityLog {
+  id             String       @id @default(cuid())
+  action         String
+  resource       String?
+  resourceId     String?
+  metadata       Json?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+}
