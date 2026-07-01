@@ -1,4 +1,5 @@
-import { demoLeads } from "@/lib/demo-data";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
 const statusBadge: Record<string, string> = {
   qualified: "text-primary bg-primary/10 border-primary/20",
@@ -13,12 +14,35 @@ function ScoreBadge({ score }: { score: number }) {
   return <span className={`font-mono text-label-md font-bold ${color}`}>{score}</span>;
 }
 
-export default function LeadsPage() {
+export default async function LeadsPage() {
+  const session = await auth();
+  const orgId = (session?.user as { organizationId?: string } | undefined)?.organizationId;
+
+  const rawLeads = orgId
+    ? await prisma.lead.findMany({
+        where: { campaign: { organizationId: orgId } },
+        include: { company: true, contact: true },
+        orderBy: { score: "desc" },
+        take: 200,
+      })
+    : [];
+
+  const leads = rawLeads.map((l) => ({
+    id: l.id,
+    company: l.company.name,
+    contact: l.contact ? `${l.contact.firstName} ${l.contact.lastName}` : "—",
+    title: l.contact?.title ?? "—",
+    email: l.contact?.email ?? "—",
+    score: l.score,
+    status: l.status,
+    industry: l.company.industry ?? "—",
+  }));
+
   const stats = {
-    total: demoLeads.length,
-    qualified: demoLeads.filter((l) => l.status === "qualified").length,
-    contacted: demoLeads.filter((l) => l.status === "contacted").length,
-    replied: demoLeads.filter((l) => l.status === "replied").length,
+    total: leads.length,
+    qualified: leads.filter((l) => l.status === "qualified").length,
+    contacted: leads.filter((l) => l.status === "contacted").length,
+    replied: leads.filter((l) => l.status === "replied").length,
   };
 
   return (
@@ -69,43 +93,47 @@ export default function LeadsPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-outline-variant text-left">
-                <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Company</th>
-                <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Contact</th>
-                <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Industry</th>
-                <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Email</th>
-                <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase text-center">Score</th>
-                <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Status</th>
-                <th className="px-lg py-sm" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-outline-variant">
-              {demoLeads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-surface-container-high transition-colors cursor-pointer">
-                  <td className="px-lg py-md text-body-sm font-medium text-on-surface">{lead.company}</td>
-                  <td className="px-lg py-md">
-                    <div className="text-body-sm text-on-surface">{lead.contact}</div>
-                    <div className="font-mono text-label-sm text-on-surface-variant">{lead.title}</div>
-                  </td>
-                  <td className="px-lg py-md font-mono text-label-md text-on-surface-variant">{lead.industry}</td>
-                  <td className="px-lg py-md font-mono text-label-md text-on-surface-variant">{lead.email}</td>
-                  <td className="px-lg py-md text-center"><ScoreBadge score={lead.score} /></td>
-                  <td className="px-lg py-md">
-                    <span className={`font-mono text-label-sm px-sm py-xs rounded border capitalize ${statusBadge[lead.status]}`}>
-                      {lead.status}
-                    </span>
-                  </td>
-                  <td className="px-lg py-md">
-                    <button className="text-on-surface-variant hover:text-primary transition-colors">
-                      <span className="material-symbols-outlined text-body-sm">open_in_new</span>
-                    </button>
-                  </td>
+          {leads.length === 0 ? (
+            <p className="p-lg text-body-sm text-on-surface-variant">No leads yet. Run a campaign to discover prospects.</p>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-outline-variant text-left">
+                  <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Company</th>
+                  <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Contact</th>
+                  <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Industry</th>
+                  <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Email</th>
+                  <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase text-center">Score</th>
+                  <th className="px-lg py-sm font-mono text-label-sm text-on-surface-variant uppercase">Status</th>
+                  <th className="px-lg py-sm" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-outline-variant">
+                {leads.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-surface-container-high transition-colors cursor-pointer">
+                    <td className="px-lg py-md text-body-sm font-medium text-on-surface">{lead.company}</td>
+                    <td className="px-lg py-md">
+                      <div className="text-body-sm text-on-surface">{lead.contact}</div>
+                      <div className="font-mono text-label-sm text-on-surface-variant">{lead.title}</div>
+                    </td>
+                    <td className="px-lg py-md font-mono text-label-md text-on-surface-variant">{lead.industry}</td>
+                    <td className="px-lg py-md font-mono text-label-md text-on-surface-variant">{lead.email}</td>
+                    <td className="px-lg py-md text-center"><ScoreBadge score={lead.score} /></td>
+                    <td className="px-lg py-md">
+                      <span className={`font-mono text-label-sm px-sm py-xs rounded border capitalize ${statusBadge[lead.status] ?? ""}`}>
+                        {lead.status}
+                      </span>
+                    </td>
+                    <td className="px-lg py-md">
+                      <button className="text-on-surface-variant hover:text-primary transition-colors">
+                        <span className="material-symbols-outlined text-body-sm">open_in_new</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>

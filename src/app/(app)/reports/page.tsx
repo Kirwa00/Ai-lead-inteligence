@@ -1,6 +1,36 @@
-import { demoReports, demoKpis } from "@/lib/demo-data";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  const session = await auth();
+  const orgId = (session?.user as { organizationId?: string } | undefined)?.organizationId;
+
+  const [reports, allLeads] = await Promise.all([
+    orgId
+      ? prisma.report.findMany({
+          where: { campaign: { organizationId: orgId } },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
+    orgId
+      ? prisma.lead.findMany({
+          where: { campaign: { organizationId: orgId } },
+          select: { status: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const totalLeads = allLeads.length;
+  const qualifiedLeads = allLeads.filter((l) => l.status === "qualified").length;
+  const repliedLeads = allLeads.filter((l) => l.status === "replied").length;
+
+  const kpis = {
+    leadAccuracy: totalLeads > 0 ? ((qualifiedLeads / totalLeads) * 100).toFixed(1) + "%" : "—",
+    emailDeliverability: "—",
+    replyRate: totalLeads > 0 ? ((repliedLeads / totalLeads) * 100).toFixed(1) + "%" : "—",
+    meetingRate: "—",
+  };
+
   return (
     <div className="space-y-lg py-lg">
       <div className="flex justify-between items-end">
@@ -17,10 +47,10 @@ export default function ReportsPage() {
       {/* KPI overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-md">
         {[
-          { label: "Lead Accuracy", value: `${demoKpis.leadAccuracy}%`, icon: "target" },
-          { label: "Email Deliverability", value: `${demoKpis.emailDeliverability}%`, icon: "mark_email_read" },
-          { label: "Reply Rate", value: `${demoKpis.replyRate}%`, icon: "reply" },
-          { label: "Meeting Rate", value: `${demoKpis.meetingRate}%`, icon: "event" },
+          { label: "Lead Accuracy", value: kpis.leadAccuracy, icon: "target" },
+          { label: "Email Deliverability", value: kpis.emailDeliverability, icon: "mark_email_read" },
+          { label: "Reply Rate", value: kpis.replyRate, icon: "reply" },
+          { label: "Meeting Rate", value: kpis.meetingRate, icon: "event" },
         ].map(({ label, value, icon }) => (
           <div key={label} className="bg-surface-container-low border border-outline-variant rounded-xl p-lg ai-glow">
             <div className="flex justify-between items-start mb-md">
@@ -43,42 +73,36 @@ export default function ReportsPage() {
           <h2 className="text-headline-sm font-bold text-on-surface">Generated Reports</h2>
         </div>
         <div className="divide-y divide-outline-variant">
-          {demoReports.map((r) => (
-            <div
-              key={r.id}
-              className="p-lg flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer"
-            >
-              <div className="flex items-center gap-md">
-                <div className="w-10 h-10 bg-surface-container-high border border-outline-variant rounded-xl flex items-center justify-center">
-                  <span
-                    className="material-symbols-outlined text-primary text-body-sm"
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                  >
-                    description
-                  </span>
-                </div>
-                <div>
-                  <div className="text-body-sm font-medium text-on-surface">{r.name}</div>
-                  <div className="font-mono text-label-sm text-on-surface-variant">
-                    {r.date} · {r.type}
+          {reports.length === 0 ? (
+            <p className="p-lg text-body-sm text-on-surface-variant">No reports yet. Run a campaign to generate analytics.</p>
+          ) : (
+            reports.map((r) => (
+              <div
+                key={r.id}
+                className="p-lg flex items-center justify-between hover:bg-surface-container-high transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-md">
+                  <div className="w-10 h-10 bg-surface-container-high border border-outline-variant rounded-xl flex items-center justify-center">
+                    <span
+                      className="material-symbols-outlined text-primary text-body-sm"
+                      style={{ fontVariationSettings: "'FILL' 1" }}
+                    >
+                      description
+                    </span>
                   </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-lg">
-                <div className="text-right">
-                  <div className="font-mono text-label-md font-bold text-on-surface">{r.leads.toLocaleString()}</div>
-                  <div className="font-mono text-label-sm text-on-surface-variant">leads</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-mono text-label-md font-bold text-primary">{r.meetings}</div>
-                  <div className="font-mono text-label-sm text-on-surface-variant">meetings</div>
+                  <div>
+                    <div className="text-body-sm font-medium text-on-surface">{r.name}</div>
+                    <div className="font-mono text-label-sm text-on-surface-variant">
+                      {r.createdAt.toISOString().split("T")[0]} · {r.type}
+                    </div>
+                  </div>
                 </div>
                 <button className="text-on-surface-variant hover:text-primary transition-colors">
                   <span className="material-symbols-outlined text-body-sm">download</span>
                 </button>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

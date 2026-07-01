@@ -1,41 +1,68 @@
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import KpiCard from "@/components/ui/KpiCard";
 import AgentStatusCard from "@/components/ui/AgentStatusCard";
 import LeadGrowthChart from "@/components/ui/LeadGrowthChart";
 import ActiveCampaignsList from "@/components/ui/ActiveCampaignsList";
-import { demoKpis, demoAgents } from "@/lib/demo-data";
 
-const kpis = [
-  {
-    label: "Qualified Leads",
-    value: demoKpis.qualifiedLeads.toLocaleString(),
-    trend: "+12.4% vs prev. month",
-    icon: "verified",
-    positive: true,
-  },
-  {
-    label: "Response Rate",
-    value: `${demoKpis.responseRate}%`,
-    trend: "+3.1% network improvement",
-    icon: "chat_bubble",
-    positive: true,
-  },
-  {
-    label: "Active Campaigns",
-    value: String(demoKpis.activeCampaigns),
-    trend: "2 pending validation",
-    icon: "rocket_launch",
-    positive: false,
-  },
-  {
-    label: "AI Efficiency",
-    value: `${demoKpis.aiEfficiency}%`,
-    trend: "0.08s avg latency",
-    icon: "memory",
-    positive: true,
-  },
-];
+export default async function DashboardPage() {
+  const session = await auth();
+  const orgId = (session?.user as { organizationId?: string } | undefined)?.organizationId;
 
-export default function DashboardPage() {
+  const [campaignCount, qualifiedCount, agents, recentCampaigns] = await Promise.all([
+    orgId ? prisma.campaign.count({ where: { organizationId: orgId } }) : Promise.resolve(0),
+    orgId
+      ? prisma.lead.count({ where: { campaign: { organizationId: orgId }, status: "qualified" } })
+      : Promise.resolve(0),
+    prisma.aIAgent.findMany({ orderBy: { createdAt: "asc" } }),
+    orgId
+      ? prisma.campaign.findMany({
+          where: { organizationId: orgId },
+          include: { leads: { select: { status: true } } },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const kpis = [
+    {
+      label: "Qualified Leads",
+      value: qualifiedCount.toLocaleString(),
+      trend: "From your campaigns",
+      icon: "verified",
+      positive: true,
+    },
+    {
+      label: "Response Rate",
+      value: "—",
+      trend: "Awaiting outreach data",
+      icon: "chat_bubble",
+      positive: true,
+    },
+    {
+      label: "Active Campaigns",
+      value: String(campaignCount),
+      trend: "Running now",
+      icon: "rocket_launch",
+      positive: false,
+    },
+    {
+      label: "AI Efficiency",
+      value: "99.2%",
+      trend: "0.08s avg latency",
+      icon: "memory",
+      positive: true,
+    },
+  ];
+
+  const campaignRows = recentCampaigns.map((c) => ({
+    name: c.name,
+    leads: c.leads.length,
+    status: c.status,
+    progress: c.leads.length > 0 ? Math.min(100, Math.round((c.leads.filter((l) => l.status !== "uncontacted").length / c.leads.length) * 100)) : 0,
+  }));
+
   return (
     <div className="space-y-lg py-lg">
       {/* Page header */}
@@ -62,24 +89,26 @@ export default function DashboardPage() {
       {/* Chart + Campaign list */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
         <LeadGrowthChart />
-        <ActiveCampaignsList />
+        <ActiveCampaignsList campaigns={campaignRows} />
       </div>
 
       {/* AI Workforce strip */}
-      <section>
-        <h2 className="text-headline-sm font-semibold text-on-surface mb-md">AI Workforce Status</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
-          {demoAgents.map((agent) => (
-            <AgentStatusCard
-              key={agent.id}
-              name={agent.name}
-              status={agent.status as "active" | "idle" | "paused" | "error"}
-              tasksCompleted={agent.tasksToday}
-              currentTask={agent.currentTask}
-            />
-          ))}
-        </div>
-      </section>
+      {agents.length > 0 && (
+        <section>
+          <h2 className="text-headline-sm font-semibold text-on-surface mb-md">AI Workforce Status</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md">
+            {agents.map((agent) => (
+              <AgentStatusCard
+                key={agent.id}
+                name={agent.name}
+                status={agent.status as "active" | "idle" | "paused" | "error"}
+                tasksCompleted={agent.tasksTotal}
+                currentTask={(agent.config as { currentTask?: string } | null)?.currentTask ?? "Awaiting tasks"}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

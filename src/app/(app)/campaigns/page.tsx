@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { demoCampaigns } from "@/lib/demo-data";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
 const statusBadge: Record<string, string> = {
   active: "text-primary bg-primary/10 border-primary/20",
@@ -9,10 +10,33 @@ const statusBadge: Record<string, string> = {
   completed: "text-on-surface-variant bg-surface-container-high border-outline-variant",
 };
 
-export default function CampaignsPage() {
-  const totalMeetings = demoCampaigns.reduce((s, c) => s + c.meetings, 0);
-  const totalReplied = demoCampaigns.reduce((s, c) => s + c.replied, 0);
-  const totalLeads = demoCampaigns.reduce((s, c) => s + c.leads, 0);
+export default async function CampaignsPage() {
+  const session = await auth();
+  const orgId = (session?.user as { organizationId?: string } | undefined)?.organizationId;
+
+  const rawCampaigns = orgId
+    ? await prisma.campaign.findMany({
+        where: { organizationId: orgId },
+        include: { leads: { select: { status: true } } },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+
+  const campaigns = rawCampaigns.map((c) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    industry: c.industry ?? "—",
+    geography: c.geography ?? "—",
+    leads: c.leads.length,
+    replied: c.leads.filter((l) => l.status === "replied").length,
+    meetings: c.leads.filter((l) => l.status === "meeting_booked").length,
+    created: c.createdAt.toISOString().split("T")[0],
+  }));
+
+  const totalLeads = campaigns.reduce((s, c) => s + c.leads, 0);
+  const totalReplied = campaigns.reduce((s, c) => s + c.replied, 0);
+  const totalMeetings = campaigns.reduce((s, c) => s + c.meetings, 0);
   const replyRate = totalLeads > 0 ? ((totalReplied / totalLeads) * 100).toFixed(1) : "0.0";
 
   return (
@@ -34,8 +58,8 @@ export default function CampaignsPage() {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-md">
         {[
-          { label: "Total Campaigns", value: String(demoCampaigns.length) },
-          { label: "Active", value: String(demoCampaigns.filter((c) => c.status === "active").length) },
+          { label: "Total Campaigns", value: String(campaigns.length) },
+          { label: "Active", value: String(campaigns.filter((c) => c.status === "active").length) },
           { label: "Meetings Booked", value: String(totalMeetings) },
           { label: "Avg Reply Rate", value: `${replyRate}%` },
         ].map(({ label, value }) => (
@@ -47,44 +71,53 @@ export default function CampaignsPage() {
       </div>
 
       {/* Campaign cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
-        {demoCampaigns.map((c) => (
-          <div
-            key={c.id}
-            className="bg-surface-container-low border border-outline-variant rounded-xl p-lg ai-glow hover:border-primary/40 transition-colors cursor-pointer"
-          >
-            <div className="flex justify-between items-start mb-md">
-              <h3 className="text-body-md font-semibold text-on-surface flex-1 mr-md">{c.name}</h3>
-              <span className={`font-mono text-label-sm px-sm py-xs rounded border capitalize ${statusBadge[c.status]}`}>
-                {c.status}
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-sm mb-md">
-              {[
-                { label: "Leads", value: c.leads },
-                { label: "Replied", value: c.replied },
-                { label: "Meetings", value: c.meetings },
-              ].map(({ label, value }) => (
-                <div key={label} className="bg-surface-container-high rounded-lg p-sm text-center">
-                  <div className="font-mono text-label-md font-bold text-on-surface">{value}</div>
-                  <div className="font-mono text-label-sm text-on-surface-variant">{label}</div>
+      {campaigns.length === 0 ? (
+        <div className="text-center py-2xl text-on-surface-variant">
+          <span className="material-symbols-outlined text-display-sm mb-md block">rocket_launch</span>
+          <p className="text-body-md">No campaigns yet. Create your first one.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
+          {campaigns.map((c) => (
+            <div
+              key={c.id}
+              className="bg-surface-container-low border border-outline-variant rounded-xl p-lg ai-glow hover:border-primary/40 transition-colors cursor-pointer"
+            >
+              <div className="flex justify-between items-start mb-md">
+                <h3 className="text-body-md font-semibold text-on-surface flex-1 mr-md">{c.name}</h3>
+                <span className={`font-mono text-label-sm px-sm py-xs rounded border capitalize ${statusBadge[c.status]}`}>
+                  {c.status}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-sm mb-md">
+                {[
+                  { label: "Leads", value: c.leads },
+                  { label: "Replied", value: c.replied },
+                  { label: "Meetings", value: c.meetings },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-surface-container-high rounded-lg p-sm text-center">
+                    <div className="font-mono text-label-md font-bold text-on-surface">{value}</div>
+                    <div className="font-mono text-label-sm text-on-surface-variant">{label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-label-sm text-on-surface-variant">
+                  {c.industry} · {c.geography} · {c.created}
+                </span>
+                <div className="flex gap-sm">
+                  <button className="text-on-surface-variant hover:text-primary transition-colors">
+                    <span className="material-symbols-outlined text-body-sm">edit</span>
+                  </button>
+                  <button className="text-on-surface-variant hover:text-primary transition-colors">
+                    <span className="material-symbols-outlined text-body-sm">open_in_new</span>
+                  </button>
                 </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-label-sm text-on-surface-variant">Created {c.created}</span>
-              <div className="flex gap-sm">
-                <button className="text-on-surface-variant hover:text-primary transition-colors">
-                  <span className="material-symbols-outlined text-body-sm">edit</span>
-                </button>
-                <button className="text-on-surface-variant hover:text-primary transition-colors">
-                  <span className="material-symbols-outlined text-body-sm">open_in_new</span>
-                </button>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { verifyPassword } from "@/lib/password";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -16,30 +18,50 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
 
         const { email, password } = parsed.data;
 
-        // TODO: replace with DB lookup via Prisma once DATABASE_URL is set
-        const DEMO_USERS = [
-          { id: "1", email: "admin@a1intel.com", password: "demo1234", name: "Admin User", role: "admin" },
-          { id: "2", email: "emmanuelkirwa8@gmail.com", password: "demo1234", name: "Emmanuel Kirwa", role: "admin" },
-        ];
+        const user = await prisma.user.findUnique({
+          where: { email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            passwordHash: true,
+            organizationId: true,
+          },
+        });
 
-        const user = DEMO_USERS.find((u) => u.email === email && u.password === password);
-        if (!user) return null;
-        return { id: user.id, email: user.email, name: user.name, role: user.role };
+        if (!user?.passwordHash) return null;
+        const valid = await verifyPassword(password, user.passwordHash);
+        if (!valid) return null;
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name ?? undefined,
+          role: user.role,
+          organizationId: user.organizationId,
+        };
       },
     }),
   ],
   callbacks: {
     jwt({ token, user }) {
-      if (user) token.role = (user as { role?: string }).role;
+      if (user) {
+        const u = user as { role?: string; organizationId?: string };
+        token.role = u.role;
+        token.organizationId = u.organizationId;
+      }
       return token;
     },
     session({ session, token }) {
-      if (session.user) (session.user as { role?: unknown }).role = token.role;
+      if (session.user) {
+        const u = session.user as { role?: unknown; organizationId?: unknown };
+        u.role = token.role;
+        u.organizationId = token.organizationId;
+      }
       return session;
     },
   },
-  pages: {
-    signIn: "/login",
-  },
+  pages: { signIn: "/login" },
   session: { strategy: "jwt" },
 });

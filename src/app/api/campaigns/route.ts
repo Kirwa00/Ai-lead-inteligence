@@ -1,15 +1,39 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
-import { demoCampaigns } from "@/lib/demo-data";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import type { Session } from "next-auth";
+
+function getOrgId(session: Session | null) {
+  return (session?.user as { organizationId?: string } | undefined)?.organizationId;
+}
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const oid = getOrgId(session);
+  if (!oid) return NextResponse.json({ error: "No organization" }, { status: 400 });
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
-  const data = status ? demoCampaigns.filter((c) => c.status === status) : demoCampaigns;
+
+  const campaigns = await prisma.campaign.findMany({
+    where: { organizationId: oid, ...(status ? { status } : {}) },
+    include: { leads: { select: { status: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const data = campaigns.map((c) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    industry: c.industry,
+    geography: c.geography,
+    leads: c.leads.length,
+    replied: c.leads.filter((l) => l.status === "replied").length,
+    meetings: c.leads.filter((l) => l.status === "meeting_booked").length,
+    created: c.createdAt.toISOString().split("T")[0],
+  }));
 
   return NextResponse.json({ campaigns: data, total: data.length });
 }
@@ -28,21 +52,23 @@ const createSchema = z.object({
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const oid = getOrgId(session);
+  if (!oid) return NextResponse.json({ error: "No organization" }, { status: 400 });
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  // TODO: replace with Prisma create once DATABASE_URL is configured
-  const newCampaign = {
-    id: String(Date.now()),
-    ...parsed.data,
-    status: "draft",
-    leads: 0,
-    replied: 0,
-    meetings: 0,
-    created: new Date().toISOString().split("T")[0],
-  };
+  const { targetTitles, keywords, ...rest } = parsed.data;
 
-  return NextResponse.json({ campaign: newCampaign }, { status: 201 });
+  const campaign = await prisma.campaign.create({
+    data: {
+      ...rest,
+      targetTitles: targetTitles ? targetTitles.split(",").map((s) => s.trim()).filter(Boolean) : [],
+      keywords: keywords ? keywords.split(",").map((s) => s.trim()).filter(Boolean) : [],
+      organizationId: oid,
+    },
+  });
+
+  return NextResponse.json({ campaign }, { status: 201 });
 }

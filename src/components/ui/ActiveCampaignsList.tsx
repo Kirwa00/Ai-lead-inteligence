@@ -1,25 +1,30 @@
-const campaigns = [
-  { name: "Kenya FinTech Outreach", leads: 142, status: "active", progress: 72 },
-  { name: "East Africa SaaS CEOs", leads: 89, status: "active", progress: 45 },
-  { name: "Nairobi Real Estate Q3", leads: 211, status: "paused", progress: 91 },
-  { name: "Pan-Africa Healthcare", leads: 54, status: "active", progress: 28 },
-  { name: "Logistics & Supply Chain", leads: 76, status: "validating", progress: 60 },
-];
-
 const statusBadge: Record<string, string> = {
   active: "text-primary bg-primary/10 border-primary/20",
   paused: "text-secondary bg-secondary/10 border-secondary/20",
   validating: "text-tertiary bg-tertiary/10 border-tertiary/20",
+  draft: "text-on-surface-variant bg-surface-container-high border-outline-variant",
 };
 
-export default function ActiveCampaignsList() {
+type CampaignRow = {
+  name: string;
+  leads: number;
+  status: string;
+  progress?: number;
+};
+
+export default function ActiveCampaignsList({ campaigns }: { campaigns: CampaignRow[] }) {
+  const active = campaigns.filter((c) => c.status === "active");
+
   return (
     <div className="bg-surface-container-low border border-outline-variant rounded-xl overflow-hidden">
       <div className="p-lg border-b border-outline-variant bg-surface-container-lowest flex justify-between items-center">
         <h2 className="text-headline-sm font-bold text-on-surface">Active Campaigns</h2>
-        <span className="font-mono text-label-sm text-on-surface-variant">{campaigns.length} running</span>
+        <span className="font-mono text-label-sm text-on-surface-variant">{active.length} running</span>
       </div>
       <div className="divide-y divide-outline-variant">
+        {campaigns.length === 0 && (
+          <p className="p-lg text-body-sm text-on-surface-variant">No campaigns yet.</p>
+        )}
         {campaigns.map((c) => (
           <div key={c.name} className="p-md hover:bg-surface-container-high transition-colors cursor-pointer">
             <div className="flex justify-between items-start mb-sm">
@@ -30,7 +35,7 @@ export default function ActiveCampaignsList() {
             </div>
             <div className="flex items-center gap-md">
               <div className="flex-1 h-1 bg-surface-container-high rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full" style={{ width: `${c.progress}%` }} />
+                <div className="h-full bg-primary rounded-full" style={{ width: `${c.progress ?? 0}%` }} />
               </div>
               <span className="font-mono text-label-sm text-on-surface-variant whitespace-nowrap">{c.leads} leads</span>
             </div>
