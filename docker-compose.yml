@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: a1-lead-intel-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: a1user
+      POSTGRES_PASSWORD: a1pass
+      POSTGRES_DB: a1_lead_intel
+    ports:
+      # Host 5433 -> container 5432 (avoids clashing with other local Postgres on 5432)
+      - "5433:5432"
+    volumes:
+      - a1_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U a1user -d a1_lead_intel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  a1_pgdata:
