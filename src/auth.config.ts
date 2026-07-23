@@ -5,6 +5,8 @@ export const authConfig: NextAuthConfig = {
   providers: [],
   pages: { signIn: "/login" },
   session: { strategy: "jwt" },
+  // Trust the deployment host (required on Vercel where the URL is dynamic).
+  trustHost: true,
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
