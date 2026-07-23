@@ -9,7 +9,11 @@ export const authConfig: NextAuthConfig = {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const { pathname } = nextUrl;
-      const isPublic = pathname.startsWith("/login") || pathname.startsWith("/api/auth");
+      const isPublic =
+        pathname.startsWith("/login") ||
+        pathname.startsWith("/register") ||
+        pathname.startsWith("/api/auth") ||
+        pathname.startsWith("/api/register");
       if (!isLoggedIn && !isPublic) return false;
       return true;
     },

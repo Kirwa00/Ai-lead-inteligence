@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, FormEvent } from "react";
 import Link from "next/link";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,15 +16,32 @@ export default function LoginPage() {
     setLoading(true);
 
     const fd = new FormData(e.currentTarget);
-    const result = await signIn("credentials", {
-      email: fd.get("email") as string,
-      password: fd.get("password") as string,
-      redirect: false,
+    const email = (fd.get("email") as string).trim();
+    const password = fd.get("password") as string;
+
+    const res = await fetch("/api/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: fd.get("name"),
+        email,
+        password,
+        workspace: fd.get("workspace"),
+      }),
     });
 
-    if (result?.error) {
-      setError("Invalid email or password.");
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(data.error ?? "Could not create your account.");
       setLoading(false);
+      return;
+    }
+
+    // Account created — sign the new user straight in.
+    const result = await signIn("credentials", { email, password, redirect: false });
+    if (result?.error) {
+      // Created but auto sign-in failed; send them to the login page.
+      router.push("/login");
       return;
     }
 
@@ -53,12 +70,37 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-surface-container-low border border-outline-variant rounded-xl p-2xl ai-glow">
-          <h1 className="text-headline-md font-bold text-on-surface mb-xs">Sign in</h1>
+          <h1 className="text-headline-md font-bold text-on-surface mb-xs">Create your account</h1>
           <p className="text-body-sm text-on-surface-variant mb-xl">
-            Access your AI lead generation platform.
+            Spin up your own AI lead generation workspace.
           </p>
 
           <form className="space-y-md" onSubmit={handleSubmit}>
+            <div className="space-y-xs">
+              <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
+                Full name
+              </label>
+              <input
+                name="name"
+                type="text"
+                required
+                autoComplete="name"
+                className="w-full bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant"
+                placeholder="Jane Mwangi"
+              />
+            </div>
+            <div className="space-y-xs">
+              <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
+                Workspace name <span className="opacity-60">(optional)</span>
+              </label>
+              <input
+                name="workspace"
+                type="text"
+                autoComplete="organization"
+                className="w-full bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant"
+                placeholder="Acme Growth"
+              />
+            </div>
             <div className="space-y-xs">
               <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
                 Email
@@ -80,9 +122,10 @@ export default function LoginPage() {
                 name="password"
                 type="password"
                 required
-                autoComplete="current-password"
+                minLength={8}
+                autoComplete="new-password"
                 className="w-full bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant"
-                placeholder="••••••••"
+                placeholder="At least 8 characters"
               />
             </div>
 
@@ -101,32 +144,18 @@ export default function LoginPage() {
               <span
                 className={`material-symbols-outlined text-body-sm${loading ? " animate-spin" : ""}`}
               >
-                {loading ? "progress_activity" : "login"}
+                {loading ? "progress_activity" : "person_add"}
               </span>
-              {loading ? "Signing in…" : "Sign In"}
+              {loading ? "Creating account…" : "Create Account"}
             </button>
           </form>
-
-          <div className="mt-lg pt-lg border-t border-outline-variant flex items-center justify-center gap-md">
-            <button className="flex items-center gap-sm px-md py-xs border border-outline-variant rounded-xl text-on-surface-variant font-mono text-label-sm hover:border-primary hover:text-primary transition-colors">
-              <span className="material-symbols-outlined text-body-sm">business</span>
-              SSO Login
-            </button>
-          </div>
         </div>
 
         <p className="text-center font-mono text-label-sm text-on-surface-variant mt-lg">
-          New here?{" "}
-          <Link href="/register" className="text-primary hover:underline">
-            Create an account
+          Already have an account?{" "}
+          <Link href="/login" className="text-primary hover:underline">
+            Sign in
           </Link>
-        </p>
-
-        <p className="text-center font-mono text-label-sm text-on-surface-variant mt-sm">
-          Demo:{" "}
-          <span className="text-primary">admin@a1intel.com</span>
-          {" / "}
-          <span className="text-primary">demo1234</span>
         </p>
       </div>
     </div>
