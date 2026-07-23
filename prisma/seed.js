@@ -24,8 +24,24 @@ async function main() {
   console.log("Seeding database…");
 
   // ── Organisation ─────────────────────────────────────────────────
+  // Seed the demo workspace with $5 of raw token budget (~50 research runs).
+  const DEMO_GRANT_MICROS = 5_000_000n;
   const org = await prisma.organization.create({
-    data: { name: "Enterprise Global", slug: "enterprise-global", plan: "pro" },
+    data: {
+      name: "Enterprise Global",
+      slug: "enterprise-global",
+      plan: "pro",
+      creditBalanceMicros: DEMO_GRANT_MICROS,
+    },
+  });
+  await prisma.walletTransaction.create({
+    data: {
+      organizationId: org.id,
+      type: "grant",
+      amountMicros: DEMO_GRANT_MICROS,
+      balanceAfterMicros: DEMO_GRANT_MICROS,
+      description: "Demo seed credits",
+    },
   });
 
   // ── Users ─────────────────────────────────────────────────────────

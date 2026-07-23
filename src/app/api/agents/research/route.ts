@@ -1,6 +1,10 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { getBalanceMicros, debitForUsage } from "@/lib/wallet";
+import { microsToUsd } from "@/lib/billing";
+
+const MODEL = "claude-opus-4-8";
 
 const requestSchema = z.object({
   industry: z.string().min(1),
@@ -69,7 +73,9 @@ const demoResults: CompanyMatch[] = [
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const orgId = (session?.user as { organizationId?: string } | undefined)?.organizationId;
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+  if (!session || !orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
   const parsed = requestSchema.safeParse(body);
@@ -84,6 +90,17 @@ export async function POST(req: NextRequest) {
       companies: demoResults,
       mode: "demo",
       message: "Set ANTHROPIC_API_KEY to enable AI-powered research",
+    });
+  }
+
+  // Balance gate — block the paid action when the wallet is empty.
+  const balanceBefore = await getBalanceMicros(orgId);
+  if (balanceBefore <= BigInt(0)) {
+    return NextResponse.json({
+      companies: [],
+      mode: "no_credits",
+      balanceUsd: 0,
+      message: "You're out of credits. Top up to run the Research Agent.",
     });
   }
 
@@ -115,7 +132,7 @@ Respond with ONLY valid JSON — no markdown, no explanation, just the array.`;
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-8",
+        model: MODEL,
         max_tokens: 4096,
         thinking: { type: "adaptive" },
         messages: [{ role: "user", content: prompt }],
@@ -140,7 +157,29 @@ Respond with ONLY valid JSON — no markdown, no explanation, just the array.`;
       if (match) companies = JSON.parse(match[0]);
     }
 
-    return NextResponse.json({ companies, mode: "ai" });
+    // Meter the real token usage against the wallet. Metering must never break
+    // a successful research response, so failures here are logged, not thrown.
+    const usage = (data.usage ?? {}) as { input_tokens?: number; output_tokens?: number };
+    let balanceUsd: number | undefined;
+    let costUsd: number | undefined;
+    try {
+      const { chargeMicros, balanceMicros } = await debitForUsage({
+        organizationId: orgId,
+        userId,
+        feature: "research",
+        agentType: "research",
+        model: MODEL,
+        inputTokens: usage.input_tokens ?? 0,
+        outputTokens: usage.output_tokens ?? 0,
+      });
+      // Customer-facing value: what the run cost them and their remaining balance.
+      costUsd = microsToUsd(chargeMicros);
+      balanceUsd = microsToUsd(balanceMicros);
+    } catch (meterErr) {
+      console.error("[research-agent] metering failed:", meterErr);
+    }
+
+    return NextResponse.json({ companies, mode: "ai", costUsd, balanceUsd });
   } catch (err) {
     console.error("[research-agent] Anthropic error:", err);
     return NextResponse.json({ companies: demoResults, mode: "demo_fallback" });

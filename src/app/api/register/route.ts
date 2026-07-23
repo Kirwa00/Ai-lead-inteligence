@@ -4,6 +4,8 @@ import { randomBytes } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
+import { grantCredits } from "@/lib/wallet";
+import { FREE_GRANT_MICROS } from "@/lib/billing";
 
 export const runtime = "nodejs";
 
@@ -73,6 +75,8 @@ export async function POST(req: Request) {
           organizationId: org.id,
         },
       });
+      // Free starter grant so new workspaces can try the AI agents before paying.
+      await grantCredits(tx, org.id, FREE_GRANT_MICROS, "Free starter credits");
     });
   } catch (err) {
     // Unique-constraint race (email or slug) or any other write failure.

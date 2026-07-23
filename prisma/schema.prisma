@@ -11,12 +11,53 @@ model Organization {
   name        String
   slug        String       @unique
   plan        String       @default("free")
+  // Prepaid wallet balance in micro-USD (1e-6 USD) of raw Anthropic token budget.
+  // The 7x markup is applied at purchase time; the meter debits real token cost.
+  creditBalanceMicros BigInt @default(0)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   users       User[]
   campaigns   Campaign[]
   integrations Integration[]
   logs        ActivityLog[]
+  reports     Report[]
+  walletTransactions WalletTransaction[]
+  usageEvents        UsageEvent[]
+}
+
+// Append-only ledger of every credit movement (grant / topup / debit / refund).
+model WalletTransaction {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type               String       // grant | topup | debit | refund | adjustment
+  amountMicros       BigInt       // signed: positive = credit, negative = debit
+  balanceAfterMicros BigInt
+  description        String?
+  metadata           Json?
+  usageEvent         UsageEvent?
+  createdAt          DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+}
+
+// One row per billed LLM call — the metering source of truth (tokens, model, cost).
+model UsageEvent {
+  id                  String             @id @default(cuid())
+  organizationId      String
+  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId              String?
+  feature             String             // e.g. "research"
+  agentType           String?            // e.g. "research"
+  model               String             // e.g. "claude-opus-4-8"
+  inputTokens         Int                @default(0)
+  outputTokens        Int                @default(0)
+  rawCostMicros       BigInt
+  walletTransactionId String?            @unique
+  walletTransaction   WalletTransaction? @relation(fields: [walletTransactionId], references: [id])
+  createdAt           DateTime           @default(now())
+
+  @@index([organizationId, createdAt])
 }
 
 model User {
@@ -175,6 +216,10 @@ model Report {
   type       String
   campaignId String?
   campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  // Reconciled with existing Supabase column (holds real data) to avoid a
+  // destructive drop during db push.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
   data       Json?
   createdAt  DateTime @default(now())
 }
