@@ -12,7 +12,8 @@ export default auth((req) => {
     pathname.startsWith("/login") ||
     pathname.startsWith("/register") ||
     pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/api/register");
+    pathname.startsWith("/api/register") ||
+    pathname.startsWith("/api/webhooks");
 
   if (!isLoggedIn && !isPublic) {
     const loginUrl = new URL("/login", req.url);

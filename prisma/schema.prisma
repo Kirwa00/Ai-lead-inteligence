@@ -23,6 +23,28 @@ model Organization {
   reports     Report[]
   walletTransactions WalletTransaction[]
   usageEvents        UsageEvent[]
+  payments           Payment[]
+}
+
+// A top-up payment via a provider (Stripe / Flutterwave). Credits the wallet
+// (as a WalletTransaction) once the provider confirms success.
+model Payment {
+  id                  String       @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId              String?
+  provider            String       // "stripe" | "flutterwave"
+  providerRef         String       // checkout session id / tx ref
+  packageId           String?
+  valueMicros         BigInt       // service value to credit on success
+  currency            String       @default("USD")
+  status              String       @default("pending") // pending | succeeded | failed
+  walletTransactionId String?      @unique
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@unique([provider, providerRef]) // idempotency: one credit per provider ref
+  @@index([organizationId, createdAt])
 }
 
 // Append-only ledger of every credit movement (grant / topup / debit / refund).

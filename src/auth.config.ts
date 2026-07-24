@@ -15,7 +15,8 @@ export const authConfig: NextAuthConfig = {
         pathname.startsWith("/login") ||
         pathname.startsWith("/register") ||
         pathname.startsWith("/api/auth") ||
-        pathname.startsWith("/api/register");
+        pathname.startsWith("/api/register") ||
+        pathname.startsWith("/api/webhooks");
       if (!isLoggedIn && !isPublic) return false;
       return true;
     },

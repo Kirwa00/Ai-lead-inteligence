@@ -12,6 +12,7 @@ const navItems = [
   { href: "/workforce", icon: "smart_toy", label: "AI Workforce" },
   { href: "/workflows", icon: "analytics", label: "Workflow Monitor" },
   { href: "/reports", icon: "assessment", label: "Reports" },
+  { href: "/billing", icon: "credit_card", label: "Billing" },
 ];
 
 export default function Sidebar() {
