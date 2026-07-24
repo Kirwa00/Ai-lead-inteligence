@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getBalanceMicros, debitForUsage } from "@/lib/wallet";
 import { RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
@@ -57,15 +58,33 @@ Keywords: ${campaign.keywords.join(", ") || "General"}
 ${campaign.context ? `\nWhat we offer / context:\n${campaign.context.slice(0, 6000)}` : ""}
 
 Prioritise companies that would genuinely benefit from what we offer.
-Return ONLY a valid JSON array; each object must have exactly:
-- name: string
-- industry: string
-- geography: string (city / country)
-- size: string (employee range)
-- description: string (1-2 sentences)
-- fitScore: number (0-100)
-- signals: string[] (2-3 current buying signals)
-No markdown, just the JSON array.`;
+For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying signals.`;
+
+// Guaranteed-valid JSON out — no markdown, no prose, no fragile regex parsing.
+const RESULT_SCHEMA = {
+  type: "object",
+  properties: {
+    companies: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          industry: { type: "string" },
+          geography: { type: "string" },
+          size: { type: "string" },
+          description: { type: "string" },
+          fitScore: { type: "integer" },
+          signals: { type: "array", items: { type: "string" } },
+        },
+        required: ["name", "industry", "geography", "size", "description", "fitScore", "signals"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["companies"],
+  additionalProperties: false,
+} as const;
 
   let companies: CompanyMatch[] = [];
   let usage = { input_tokens: 0, output_tokens: 0 };
@@ -79,8 +98,14 @@ No markdown, just the JSON array.`;
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 4096,
+        max_tokens: 3000,
         thinking: { type: "adaptive" },
+        // Low effort is plenty for a bounded list-generation task and cuts
+        // latency substantially; structured output guarantees valid JSON.
+        output_config: {
+          effort: "low",
+          format: { type: "json_schema", schema: RESULT_SCHEMA },
+        },
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -90,44 +115,61 @@ No markdown, just the JSON array.`;
     const textBlock = (data.content as Array<{ type: string; text?: string }>)?.find(
       (b) => b.type === "text"
     );
-    const rawText = textBlock?.text ?? "[]";
-    try {
-      companies = JSON.parse(rawText);
-    } catch {
-      const m = rawText.match(/\[[\s\S]*\]/);
-      if (m) companies = JSON.parse(m[0]);
-    }
+    const parsed = JSON.parse(textBlock?.text ?? '{"companies":[]}');
+    companies = Array.isArray(parsed) ? parsed : parsed.companies ?? [];
   } catch (err) {
     console.error("[campaign-research] Anthropic error:", err);
     return NextResponse.json({ error: "Research failed. Please try again." }, { status: 502 });
   }
 
-  // Persist matches as Company + Lead rows on this campaign.
+  // Persist matches. Pre-generate ids so this is 3 batched statements in one
+  // transaction instead of ~16 sequential round-trips (which dominated the
+  // request time against a remote database).
+  const rows = companies
+    .slice(0, 8)
+    .filter((c) => c?.name)
+    .map((c) => ({
+      companyId: randomUUID(),
+      leadId: randomUUID(),
+      name: c.name,
+      industry: c.industry ?? campaign.industry ?? null,
+      size: c.size ?? null,
+      country: c.geography ?? campaign.geography ?? null,
+      description: c.description ?? null,
+      score: Math.max(0, Math.min(100, Math.round(c.fitScore ?? 0))),
+      signals: c.signals?.length ? c.signals.join(" · ") : null,
+    }));
+
   let added = 0;
-  for (const c of companies.slice(0, 8)) {
-    if (!c?.name) continue;
+  if (rows.length > 0) {
     try {
-      const company = await prisma.company.create({
-        data: {
-          name: c.name,
-          industry: c.industry ?? campaign.industry ?? null,
-          size: c.size ?? null,
-          country: c.geography ?? campaign.geography ?? null,
-          description: c.description ?? null,
-        },
-      });
-      await prisma.lead.create({
-        data: {
-          campaignId: campaign.id,
-          companyId: company.id,
-          score: Math.max(0, Math.min(100, Math.round(c.fitScore ?? 0))),
-          status: "uncontacted",
-          activities: c.signals?.length
-            ? { create: { type: "research", note: c.signals.join(" · ") } }
-            : undefined,
-        },
-      });
-      added += 1;
+      await prisma.$transaction([
+        prisma.company.createMany({
+          data: rows.map((r) => ({
+            id: r.companyId,
+            name: r.name,
+            industry: r.industry,
+            size: r.size,
+            country: r.country,
+            description: r.description,
+          })),
+        }),
+        prisma.lead.createMany({
+          data: rows.map((r) => ({
+            id: r.leadId,
+            campaignId: campaign.id,
+            companyId: r.companyId,
+            score: r.score,
+            status: "uncontacted",
+          })),
+        }),
+        prisma.leadActivity.createMany({
+          data: rows
+            .filter((r) => r.signals)
+            .map((r) => ({ leadId: r.leadId, type: "research", note: r.signals as string })),
+        }),
+      ]);
+      added = rows.length;
     } catch (err) {
       console.error("[campaign-research] save failed:", err);
     }
