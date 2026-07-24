@@ -5,7 +5,8 @@ import { getBalanceMicros, debitForUsage } from "@/lib/wallet";
 import { microsToUsd, RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
 
-const MODEL = "claude-opus-4-8";
+// Kept in sync with the campaign research agent — see RESEARCH_MODEL override.
+const MODEL = process.env.RESEARCH_MODEL || "claude-sonnet-5";
 
 const requestSchema = z.object({
   industry: z.string().min(1).max(100),

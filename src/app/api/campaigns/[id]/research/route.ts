@@ -7,7 +7,10 @@ import { RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
-const MODEL = "claude-opus-4-8";
+// Sonnet 5 is materially faster and ~40% cheaper per token than Opus 4.8, which
+// also means more research runs per credit package. Override with RESEARCH_MODEL
+// (e.g. claude-opus-4-8) if lead quality ever needs the bigger model.
+const MODEL = process.env.RESEARCH_MODEL || "claude-sonnet-5";
 
 type CompanyMatch = {
   name: string;
