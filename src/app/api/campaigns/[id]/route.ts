@@ -39,3 +39,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   return NextResponse.json({ id: params.id, status: parsed.data.status });
 }
+
+// Delete a campaign (and its leads via cascade), org-scoped.
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await auth();
+  const oid = getOrgId(session);
+  if (!session || !oid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const result = await prisma.campaign.deleteMany({
+    where: { id: params.id, organizationId: oid },
+  });
+  if (result.count === 0) {
+    return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
+}

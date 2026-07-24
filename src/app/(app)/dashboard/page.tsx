@@ -12,7 +12,9 @@ export default async function DashboardPage() {
   const orgId = (session?.user as { organizationId?: string } | undefined)?.organizationId;
 
   const [campaignCount, qualifiedCount, agents, recentCampaigns] = await Promise.all([
-    orgId ? prisma.campaign.count({ where: { organizationId: orgId } }) : Promise.resolve(0),
+    orgId
+      ? prisma.campaign.count({ where: { organizationId: orgId, status: "active" } })
+      : Promise.resolve(0),
     orgId
       ? prisma.lead.count({ where: { campaign: { organizationId: orgId }, status: "qualified" } })
       : Promise.resolve(0),
@@ -59,6 +61,7 @@ export default async function DashboardPage() {
   ];
 
   const campaignRows = recentCampaigns.map((c) => ({
+    id: c.id,
     name: c.name,
     leads: c.leads.length,
     status: c.status,
