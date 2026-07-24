@@ -111,11 +111,27 @@ model Campaign {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leads          Lead[]
+  researchJobs   ResearchJob[]
   workflows      Workflow[]
   emails         Email[]
   reports        Report[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+}
+
+// Tracks an async Research Agent run so the UI doesn't block on a ~20s LLM call.
+model ResearchJob {
+  id             String    @id @default(cuid())
+  campaignId     String
+  campaign       Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  organizationId String
+  status         String    @default("queued") // queued | running | succeeded | failed
+  added          Int       @default(0)
+  error          String?
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  @@index([campaignId, createdAt])
 }
 
 model Company {
