@@ -29,7 +29,8 @@ export const authConfig: NextAuthConfig = {
     },
     session({ session, token }) {
       if (session.user) {
-        const u = session.user as { role?: unknown; organizationId?: unknown };
+        const u = session.user as { id?: unknown; role?: unknown; organizationId?: unknown };
+        u.id = token.sub; // NextAuth stores the user id on token.sub
         u.role = token.role;
         u.organizationId = token.organizationId;
       }

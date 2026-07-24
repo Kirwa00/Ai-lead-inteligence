@@ -1,88 +1,87 @@
-const sections = [
-  {
-    title: "Organisation",
-    items: [
-      { label: "Organisation Name", value: "Enterprise Global", type: "text" },
-      { label: "Billing Email", value: "admin@enterprise.global", type: "email" },
-      { label: "Timezone", value: "Africa/Nairobi (EAT +3)", type: "select" },
-    ],
-  },
-  {
-    title: "AI Configuration",
-    items: [
-      { label: "Default AI Model", value: "Claude Opus 4.8", type: "select" },
-      { label: "Max Concurrent Agent Tasks", value: "50", type: "number" },
-      { label: "Human-in-the-Loop", value: "Campaign launch, Large exports", type: "text" },
-    ],
-  },
-  {
-    title: "Integrations",
-    items: [
-      { label: "HubSpot CRM", value: "Connected", type: "badge-success" },
-      { label: "LinkedIn Sales Nav", value: "Not connected", type: "badge-warning" },
-      { label: "Slack Notifications", value: "Connected", type: "badge-success" },
-      { label: "SendGrid", value: "Connected", type: "badge-success" },
-    ],
-  },
-];
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { microsToUsd, valueMicrosToTokenBudgetUsd } from "@/lib/billing";
+import { ProfileForm, ChangePasswordForm } from "@/components/ui/AccountSettings";
 
-export default function SettingsPage() {
+export const dynamic = "force-dynamic";
+
+function Card({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-surface-container-low border border-outline-variant rounded-xl overflow-hidden">
+      <div className="px-lg py-md border-b border-outline-variant bg-surface-container-lowest">
+        <h2 className="text-headline-sm font-semibold text-on-surface">{title}</h2>
+        {subtitle && <p className="text-body-sm text-on-surface-variant mt-xs">{subtitle}</p>}
+      </div>
+      <div className="p-lg">{children}</div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between py-sm">
+      <span className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">{label}</span>
+      <span className="text-body-sm text-on-surface">{value}</span>
+    </div>
+  );
+}
+
+export default async function SettingsPage() {
+  const session = await auth();
+  const userId = (session?.user as { id?: string } | undefined)?.id;
+
+  const user = userId
+    ? await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          organization: {
+            select: { name: true, slug: true, plan: true, creditBalanceMicros: true },
+          },
+        },
+      })
+    : null;
+
+  const org = user?.organization;
+  const balanceUsd = org ? microsToUsd(org.creditBalanceMicros) : 0;
+  const tokenBudgetUsd = org ? valueMicrosToTokenBudgetUsd(org.creditBalanceMicros) : 0;
+
   return (
     <div className="space-y-lg py-lg max-w-3xl">
       <div>
         <h1 className="text-headline-lg font-bold text-on-surface tracking-tight mb-xs">Settings</h1>
-        <p className="text-body-md text-on-surface-variant">
-          Manage your organisation, AI, and integration preferences.
-        </p>
+        <p className="text-body-md text-on-surface-variant">Manage your account, security, and workspace.</p>
       </div>
 
-      {sections.map((section) => (
-        <div
-          key={section.title}
-          className="bg-surface-container-low border border-outline-variant rounded-xl overflow-hidden"
-        >
-          <div className="px-lg py-md border-b border-outline-variant bg-surface-container-lowest">
-            <h2 className="text-headline-sm font-semibold text-on-surface">{section.title}</h2>
-          </div>
-          <div className="divide-y divide-outline-variant">
-            {section.items.map(({ label, value, type }) => (
-              <div key={label} className="px-lg py-md flex items-center justify-between">
-                <span className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
-                  {label}
-                </span>
-                {type === "badge-success" && (
-                  <span className="font-mono text-label-sm px-sm py-xs rounded border text-primary bg-primary/10 border-primary/20">
-                    {value}
-                  </span>
-                )}
-                {type === "badge-warning" && (
-                  <div className="flex items-center gap-sm">
-                    <span className="font-mono text-label-sm px-sm py-xs rounded border text-on-surface-variant bg-surface-container-high border-outline-variant">
-                      {value}
-                    </span>
-                    <button className="font-mono text-label-sm text-primary hover:underline">Connect</button>
-                  </div>
-                )}
-                {!type.startsWith("badge") && (
-                  <input
-                    className="bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-xs rounded-lg focus:outline-none focus:ring-1 focus:ring-primary transition-all text-right"
-                    defaultValue={value}
-                  />
-                )}
-              </div>
-            ))}
+      <Card title="Account" subtitle="Your personal profile.">
+        <div className="space-y-md">
+          <ProfileForm initialName={user?.name ?? ""} />
+          <div className="border-t border-outline-variant pt-md">
+            <Row label="Email" value={user?.email ?? "—"} />
+            <Row label="Role" value={user?.role ?? "—"} />
+            <Row
+              label="Member Since"
+              value={user?.createdAt ? user.createdAt.toISOString().split("T")[0] : "—"}
+            />
           </div>
         </div>
-      ))}
+      </Card>
 
-      <div className="flex justify-end gap-sm">
-        <button className="px-lg py-sm border border-outline-variant text-on-surface-variant font-mono text-label-md rounded-xl hover:border-primary hover:text-primary transition-colors">
-          Discard Changes
-        </button>
-        <button className="px-lg py-sm bg-primary-container text-on-primary-container font-mono text-label-md font-bold rounded-xl hover:brightness-105 transition-all active:scale-95">
-          Save Settings
-        </button>
-      </div>
+      <Card title="Security" subtitle="Change your password.">
+        <ChangePasswordForm />
+      </Card>
+
+      <Card title="Workspace" subtitle="Your organisation and credit balance.">
+        <Row label="Workspace" value={org?.name ?? "—"} />
+        <Row label="Plan" value={org?.plan ?? "—"} />
+        <div className="border-t border-outline-variant mt-sm pt-md">
+          <Row label="Credit Balance" value={`$${balanceUsd.toFixed(2)}`} />
+          <Row label="AI Token Budget" value={`$${tokenBudgetUsd.toFixed(2)} (1/7 of value)`} />
+        </div>
+      </Card>
     </div>
   );
 }
