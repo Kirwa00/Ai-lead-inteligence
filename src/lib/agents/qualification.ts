@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { debitForUsage } from "@/lib/wallet";
-import { AGENT_MODEL, callClaudeJson } from "@/lib/agents/shared";
+import { AGENT_MODEL, callClaudeJson, TX_OPTS } from "@/lib/agents/shared";
 import type { AgentContext, AgentResult } from "@/lib/agents";
 
 const SCHEMA = {
@@ -87,7 +87,7 @@ ${list}`;
       })
     );
   }
-  if (writes.length > 0) await prisma.$transaction(writes);
+  if (writes.length > 0) await prisma.$transaction(writes, TX_OPTS);
 
   try {
     await debitForUsage({

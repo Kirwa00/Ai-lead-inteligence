@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { debitForUsage } from "@/lib/wallet";
+import { TX_OPTS } from "@/lib/agents/shared";
 
 // Sonnet 5 is materially cheaper/faster than Opus 4.8, so each credit package
 // buys more runs. Override with RESEARCH_MODEL if lead quality needs Opus.
@@ -146,7 +147,7 @@ For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying s
           .filter((r) => r.signals)
           .map((r) => ({ leadId: r.leadId, type: "research", note: r.signals as string })),
       }),
-    ]);
+    ], TX_OPTS);
   }
 
   // Meter the real token usage — never let a metering failure lose the leads.

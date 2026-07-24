@@ -2,6 +2,10 @@
 // (Sonnet 5, low effort, structured JSON output). See ai-agent-build-playbook.
 export const AGENT_MODEL = process.env.RESEARCH_MODEL || "claude-sonnet-5";
 
+// Prisma's default interactive-transaction maxWait is 2s, which the Supabase
+// pooler can miss under load (P2028). Give batch writes a generous budget.
+export const TX_OPTS = { maxWait: 15_000, timeout: 30_000 } as const;
+
 export type Usage = { input_tokens: number; output_tokens: number };
 
 export async function callClaudeJson<T>(
