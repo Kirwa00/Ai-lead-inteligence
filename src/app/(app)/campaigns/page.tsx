@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import CampaignStatusButton from "@/components/ui/CampaignStatusButton";
 
 export const dynamic = "force-dynamic";
 
@@ -107,11 +108,12 @@ export default async function CampaignsPage() {
                 <span className="font-mono text-label-sm text-on-surface-variant">
                   {c.industry} · {c.geography} · {c.created}
                 </span>
-                <div className="flex gap-sm">
-                  <button className="text-on-surface-variant hover:text-primary transition-colors">
+                <div className="flex items-center gap-sm">
+                  <CampaignStatusButton id={c.id} status={c.status} />
+                  <button className="text-on-surface-variant hover:text-primary transition-colors" title="Edit">
                     <span className="material-symbols-outlined text-body-sm">edit</span>
                   </button>
-                  <button className="text-on-surface-variant hover:text-primary transition-colors">
+                  <button className="text-on-surface-variant hover:text-primary transition-colors" title="Open">
                     <span className="material-symbols-outlined text-body-sm">open_in_new</span>
                   </button>
                 </div>

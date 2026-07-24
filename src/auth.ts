@@ -4,10 +4,11 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
 import { authConfig } from "@/auth.config";
+import { rateLimit } from "@/lib/rate-limit";
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  password: z.string().min(8),
 });
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
@@ -19,6 +20,11 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         if (!parsed.success) return null;
 
         const { email, password } = parsed.data;
+
+        // Brute-force throttle: cap sign-in attempts per email. Exceeding the
+        // window is treated as a failed login (no info leak).
+        const gate = rateLimit(`login:${email.toLowerCase()}`, 10, 15 * 60 * 1000);
+        if (!gate.ok) return null;
 
         const user = await prisma.user.findUnique({
           where: { email },

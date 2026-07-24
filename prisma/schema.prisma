@@ -77,6 +77,9 @@ model Campaign {
   name           String
   goal           String?
   description    String?
+  // Free-form product/service/objective context (and any attached doc text)
+  // that the AI workforce uses to tailor research & outreach.
+  context        String?
   status         String       @default("draft")
   industry       String?
   geography      String?

@@ -21,6 +21,14 @@ export const USAGE_MARKUP_MULTIPLIER = Number(process.env.USAGE_MARKUP_MULTIPLIE
  */
 export const FREE_GRANT_MICROS = BigInt(process.env.FREE_GRANT_MICROS ?? 3_500_000);
 
+/**
+ * Minimum value balance required to START a Research run (worst-case run value,
+ * ~$0.10 raw x 7). Gating on this instead of ">0" bounds concurrent over-spend
+ * to at most one run, closing the check-then-debit race without a full
+ * reservation system.
+ */
+export const RESEARCH_RUN_RESERVE_MICROS = BigInt(700_000);
+
 /** Per-token raw price in micro-USD, by model id. $/1M tokens == micro-USD/token. */
 type ModelRate = { inputMicrosPerToken: number; outputMicrosPerToken: number };
 

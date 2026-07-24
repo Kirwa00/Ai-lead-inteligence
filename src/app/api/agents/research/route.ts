@@ -2,15 +2,16 @@ import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getBalanceMicros, debitForUsage } from "@/lib/wallet";
-import { microsToUsd } from "@/lib/billing";
+import { microsToUsd, RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
+import { rateLimit, tooMany } from "@/lib/rate-limit";
 
 const MODEL = "claude-opus-4-8";
 
 const requestSchema = z.object({
-  industry: z.string().min(1),
-  geography: z.string().default("East Africa"),
-  companySize: z.string().optional(),
-  keywords: z.string().optional(),
+  industry: z.string().min(1).max(100),
+  geography: z.string().max(100).default("East Africa"),
+  companySize: z.string().max(60).optional(),
+  keywords: z.string().max(500).optional(),
 });
 
 type CompanyMatch = {
@@ -77,6 +78,10 @@ export async function POST(req: NextRequest) {
   const userId = (session?.user as { id?: string } | undefined)?.id;
   if (!session || !orgId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Per-org throttle — bounds token spend even for a funded account.
+  const rl = rateLimit(`research:${orgId}`, 12, 60 * 1000); // 12 / minute / org
+  if (!rl.ok) return tooMany(rl.retryAfterSec, "Too many research runs. Please wait a moment.");
+
   const body = await req.json().catch(() => ({}));
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) {
@@ -93,14 +98,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Balance gate — block the paid action when the wallet is empty.
+  // Balance gate — require at least one run's worth of value before starting.
+  // Gating on the reserve (not ">0") bounds concurrent over-spend to one run.
   const balanceBefore = await getBalanceMicros(orgId);
-  if (balanceBefore <= BigInt(0)) {
+  if (balanceBefore < RESEARCH_RUN_RESERVE_MICROS) {
     return NextResponse.json({
       companies: [],
       mode: "no_credits",
-      balanceUsd: 0,
-      message: "You're out of credits. Top up to run the Research Agent.",
+      balanceUsd: microsToUsd(balanceBefore),
+      message: "Not enough credits to run the Research Agent. Please top up.",
     });
   }
 

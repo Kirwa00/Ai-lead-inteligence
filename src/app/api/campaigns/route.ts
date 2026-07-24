@@ -42,6 +42,7 @@ const createSchema = z.object({
   name: z.string().min(1),
   goal: z.string().optional(),
   description: z.string().optional(),
+  context: z.string().max(20000).optional(),
   industry: z.string().optional(),
   geography: z.string().optional(),
   companySize: z.string().optional(),

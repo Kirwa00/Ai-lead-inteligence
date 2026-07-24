@@ -4,15 +4,19 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const oid = (session?.user as { organizationId?: string } | undefined)?.organizationId;
+  if (!session || !oid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const campaignId = searchParams.get("campaignId");
   const status = searchParams.get("status");
   const q = searchParams.get("q")?.toLowerCase();
 
+  // Tenant isolation: only leads under campaigns owned by the caller's org.
+  // The campaign.organizationId filter also neutralises a spoofed campaignId.
   const leads = await prisma.lead.findMany({
     where: {
+      campaign: { organizationId: oid },
       ...(campaignId ? { campaignId } : {}),
       ...(status ? { status } : {}),
     },
@@ -45,6 +49,7 @@ export async function GET(req: NextRequest) {
 
   const allLeads = await prisma.lead.groupBy({
     by: ["status"],
+    where: { campaign: { organizationId: oid } },
     _count: { status: true },
   });
 

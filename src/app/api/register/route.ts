@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { grantCredits } from "@/lib/wallet";
 import { FREE_GRANT_MICROS } from "@/lib/billing";
+import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,11 @@ function slugify(input: string): string {
 }
 
 export async function POST(req: Request) {
+  // Throttle signups per IP — each account grants real token budget, so this
+  // blocks scripted free-grant farming that would drain Anthropic credits.
+  const rl = rateLimit(`register:${clientIp(req)}`, 5, 60 * 60 * 1000); // 5 / hour / IP
+  if (!rl.ok) return tooMany(rl.retryAfterSec, "Too many sign-ups from this network. Try again later.");
+
   let body: unknown;
   try {
     body = await req.json();

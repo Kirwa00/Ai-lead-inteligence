@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { INDUSTRIES } from "@/lib/industries";
 
 const steps = [
   { id: 1, label: "Setup", icon: "settings" },
@@ -23,6 +24,7 @@ type Form = {
   name: string;
   goal: string;
   description: string;
+  context: string;
   startDate: string;
   industry: string;
   geography: string;
@@ -37,6 +39,7 @@ const defaultForm: Form = {
   name: "",
   goal: "Generate qualified leads",
   description: "",
+  context: "",
   startDate: "",
   industry: "FinTech",
   geography: "Kenya",
@@ -65,10 +68,34 @@ export default function NewCampaignPage() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<Form>(defaultForm);
   const [loading, setLoading] = useState(false);
+  const [attachName, setAttachName] = useState("");
+  const [attachNote, setAttachNote] = useState("");
   const router = useRouter();
 
   function set<K extends keyof Form>(key: K, value: Form[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  // Read text-based documents client-side and fold their content into the
+  // campaign context. PDFs/Word need a parser, so we prompt the user to paste.
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAttachName(file.name);
+    const isText =
+      file.type.startsWith("text/") || /\.(txt|md|markdown|csv|json|html?)$/i.test(file.name);
+    if (isText) {
+      const text = (await file.text()).slice(0, 15000);
+      setForm((f) => ({
+        ...f,
+        context: `${f.context ? f.context + "\n\n" : ""}--- From ${file.name} ---\n${text}`,
+      }));
+      setAttachNote("");
+    } else {
+      setAttachNote(
+        "Can't read this file type in-browser yet — paste the key details above so your AI workforce can use them."
+      );
+    }
   }
 
   function toggleAgent(name: string) {
@@ -85,6 +112,7 @@ export default function NewCampaignPage() {
           name: form.name || "Untitled Campaign",
           goal: form.goal,
           description: form.description,
+          context: form.context,
           industry: form.industry,
           geography: form.geography,
           companySize: form.companySize,
@@ -177,6 +205,39 @@ export default function NewCampaignPage() {
                 onChange={(e) => set("description", e.target.value)}
               />
             </Field>
+            <Field label="Product / Service Context for your AI Workforce">
+              <textarea
+                className={inputClass}
+                rows={5}
+                placeholder="Describe what you're offering, your value proposition, pricing, differentiators, and what you're trying to achieve — the AI agents use this to research and write personalised outreach on your behalf."
+                value={form.context}
+                onChange={(e) => set("context", e.target.value)}
+              />
+              <div className="flex items-center gap-sm mt-xs flex-wrap">
+                <label className="flex items-center gap-xs px-sm py-xs border border-outline-variant rounded-lg cursor-pointer text-on-surface-variant hover:border-primary hover:text-primary transition-colors font-mono text-label-sm">
+                  <span className="material-symbols-outlined text-body-sm">attach_file</span>
+                  Attach document
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".txt,.md,.markdown,.csv,.json,.html,.pdf,.doc,.docx"
+                    onChange={handleFile}
+                  />
+                </label>
+                {attachName && (
+                  <span className="flex items-center gap-xs font-mono text-label-sm text-primary">
+                    <span className="material-symbols-outlined text-body-sm">description</span>
+                    {attachName}
+                  </span>
+                )}
+              </div>
+              {attachNote && (
+                <p className="flex items-center gap-xs font-mono text-label-sm text-tertiary mt-xs">
+                  <span className="material-symbols-outlined text-body-sm">info</span>
+                  {attachNote}
+                </p>
+              )}
+            </Field>
             <Field label="Start Date">
               <input
                 className={inputClass}
@@ -198,14 +259,9 @@ export default function NewCampaignPage() {
                   value={form.industry}
                   onChange={(e) => set("industry", e.target.value)}
                 >
-                  <option>FinTech</option>
-                  <option>SaaS</option>
-                  <option>Healthcare</option>
-                  <option>Logistics</option>
-                  <option>AgriTech</option>
-                  <option>CleanTech</option>
-                  <option>EdTech</option>
-                  <option>Real Estate</option>
+                  {INDUSTRIES.map((opt) => (
+                    <option key={opt}>{opt}</option>
+                  ))}
                 </select>
               </Field>
               <Field label="Geography">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { INDUSTRIES } from "@/lib/industries";
 
 type CompanyMatch = {
   name: string;
@@ -82,16 +83,9 @@ export default function ResearchPage() {
           <div className="space-y-xs">
             <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">Industry</label>
             <select className={inputClass} value={industry} onChange={(e) => setIndustry(e.target.value)}>
-              <option>FinTech</option>
-              <option>SaaS</option>
-              <option>Healthcare</option>
-              <option>Logistics</option>
-              <option>AgriTech</option>
-              <option>CleanTech</option>
-              <option>EdTech</option>
-              <option>Real Estate</option>
-              <option>Telecom</option>
-              <option>Manufacturing</option>
+              {INDUSTRIES.map((opt) => (
+                <option key={opt}>{opt}</option>
+              ))}
             </select>
           </div>
 

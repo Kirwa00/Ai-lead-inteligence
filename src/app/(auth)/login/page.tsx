@@ -121,13 +121,6 @@ export default function LoginPage() {
             Create an account
           </Link>
         </p>
-
-        <p className="text-center font-mono text-label-sm text-on-surface-variant mt-sm">
-          Demo:{" "}
-          <span className="text-primary">admin@a1intel.com</span>
-          {" / "}
-          <span className="text-primary">demo1234</span>
-        </p>
       </div>
     </div>
   );
