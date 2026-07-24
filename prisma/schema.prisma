@@ -111,7 +111,7 @@ model Campaign {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leads          Lead[]
-  researchJobs   ResearchJob[]
+  agentJobs      AgentJob[]
   workflows      Workflow[]
   emails         Email[]
   reports        Report[]
@@ -119,19 +119,23 @@ model Campaign {
   updatedAt      DateTime     @updatedAt
 }
 
-// Tracks an async Research Agent run so the UI doesn't block on a ~20s LLM call.
-model ResearchJob {
+// Tracks an async AI-agent run so the UI doesn't block on a ~20s LLM call.
+// Table kept as "ResearchJob" via @@map so this generalisation is non-destructive.
+model AgentJob {
   id             String    @id @default(cuid())
   campaignId     String
   campaign       Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   organizationId String
-  status         String    @default("queued") // queued | running | succeeded | failed
-  added          Int       @default(0)
+  agentType      String    @default("research") // research | qualification | outreach | ...
+  status         String    @default("queued")   // queued | running | succeeded | failed
+  added          Int       @default(0)          // legacy count; summary carries detail
+  summary        String?
   error          String?
   createdAt      DateTime  @default(now())
   completedAt    DateTime?
 
-  @@index([campaignId, createdAt])
+  @@index([campaignId, agentType, createdAt])
+  @@map("ResearchJob")
 }
 
 model Company {

@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import CampaignControls from "@/components/ui/CampaignControls";
-import CampaignResearchButton from "@/components/ui/CampaignResearchButton";
+import AgentRunButton from "@/components/ui/AgentRunButton";
 import CampaignDeleteButton from "@/components/ui/CampaignDeleteButton";
+import { AGENTS } from "@/lib/agents";
 
 export const dynamic = "force-dynamic";
 
@@ -115,12 +116,18 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
         {/* AI workforce actions */}
         <div className="bg-surface-container-low border border-outline-variant rounded-xl p-lg space-y-sm">
           <h2 className="text-headline-sm font-semibold text-on-surface">AI Workforce</h2>
-          <p className="text-body-sm text-on-surface-variant">Put your agents to work on this campaign — research runs on this campaign&apos;s ICP &amp; context and adds matching leads.</p>
-          <CampaignResearchButton id={campaign.id} />
-          <Link href="/workforce" className="flex items-center gap-sm px-md py-sm border border-outline-variant text-on-surface-variant font-mono text-label-md rounded-xl hover:border-primary hover:text-primary transition-colors w-full justify-center">
-            <span className="material-symbols-outlined text-body-sm">smart_toy</span>
-            View AI Workforce
-          </Link>
+          <p className="text-body-sm text-on-surface-variant">
+            Agents run on this campaign&apos;s ICP &amp; context, in the background.
+          </p>
+          {Object.entries(AGENTS).map(([type, a]) => (
+            <AgentRunButton
+              key={type}
+              campaignId={campaign.id}
+              type={type}
+              label={a.label}
+              description={a.description}
+            />
+          ))}
         </div>
       </div>
 
