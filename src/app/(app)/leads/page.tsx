@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import LeadQuickActions from "@/components/ui/LeadQuickActions";
 
 export const dynamic = "force-dynamic";
 
@@ -127,9 +128,7 @@ export default async function LeadsPage() {
                       </span>
                     </td>
                     <td className="px-lg py-md">
-                      <button className="text-on-surface-variant hover:text-primary transition-colors">
-                        <span className="material-symbols-outlined text-body-sm">open_in_new</span>
-                      </button>
+                      <LeadQuickActions leadId={lead.id} />
                     </td>
                   </tr>
                 ))}

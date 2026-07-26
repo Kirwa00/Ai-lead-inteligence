@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { microsToUsd, valueMicrosToTokenBudgetUsd } from "@/lib/billing";
+import { microsToUsd } from "@/lib/billing";
 import TopUpButtons from "@/components/ui/TopUpButtons";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +38,13 @@ export default async function BillingPage({
 
   const balance = org?.creditBalanceMicros ?? BigInt(0);
 
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const spentThisMonthMicros = txns
+    .filter((t) => t.type === "debit" && t.createdAt >= monthStart)
+    .reduce((sum, t) => sum + -t.amountMicros, BigInt(0));
+
   return (
     <div className="space-y-lg py-lg max-w-4xl">
       <div>
@@ -65,11 +72,9 @@ export default async function BillingPage({
           <div className="text-display-lg font-bold text-on-surface mt-xs">{money(balance)}</div>
         </div>
         <div className="bg-surface-container-low border border-outline-variant rounded-xl p-lg">
-          <div className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">AI Token Budget</div>
-          <div className="text-display-lg font-bold text-on-surface mt-xs">
-            ${valueMicrosToTokenBudgetUsd(balance).toFixed(2)}
-          </div>
-          <div className="font-mono text-label-sm text-on-surface-variant">1/7 of value</div>
+          <div className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">Spent This Month</div>
+          <div className="text-display-lg font-bold text-on-surface mt-xs">{money(spentThisMonthMicros)}</div>
+          <div className="font-mono text-label-sm text-on-surface-variant">Across all AI agent runs</div>
         </div>
       </div>
 
