@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import CampaignControls from "@/components/ui/CampaignControls";
 import AgentRunButton from "@/components/ui/AgentRunButton";
 import CampaignDeleteButton from "@/components/ui/CampaignDeleteButton";
+import EmailSendButton from "@/components/ui/EmailSendButton";
 import { AGENTS } from "@/lib/agents";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,10 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
       leads: {
         include: { company: true, contact: true },
         orderBy: { score: "desc" },
+      },
+      emails: {
+        include: { lead: { include: { company: true, contact: true } } },
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -155,6 +160,59 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
                   <span className="font-mono text-label-sm text-on-surface-variant capitalize">{l.status.replace(/_/g, " ")}</span>
                   <span className="font-mono text-label-md font-bold text-primary">{l.score}</span>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Outreach emails */}
+      <div className="bg-surface-container-low border border-outline-variant rounded-xl overflow-hidden">
+        <div className="px-lg py-md border-b border-outline-variant bg-surface-container-lowest">
+          <h2 className="text-headline-sm font-semibold text-on-surface">Outreach Emails</h2>
+        </div>
+        {campaign.emails.length === 0 ? (
+          <div className="px-lg py-xl text-center text-on-surface-variant">
+            <p className="text-body-sm">
+              No emails yet. Run the Outreach or Follow-up agent to draft some.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-outline-variant">
+            {campaign.emails.map((e) => (
+              <div key={e.id} className="px-lg py-md flex items-start justify-between gap-md">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-sm mb-xs">
+                    <span className="text-body-sm font-semibold text-on-surface">{e.subject}</span>
+                    <span
+                      className={`font-mono text-label-sm px-sm py-xs rounded border capitalize shrink-0 ${
+                        e.status === "sent"
+                          ? "text-primary bg-primary/10 border-primary/20"
+                          : "text-on-surface-variant bg-surface-container-high border-outline-variant"
+                      }`}
+                    >
+                      {e.status}
+                    </span>
+                  </div>
+                  <p className="font-mono text-label-sm text-on-surface-variant mb-xs">
+                    To: {e.lead?.company?.name ?? "Unknown"}
+                    {e.lead?.contact?.email ? ` <${e.lead.contact.email}>` : " — no contact email on file"}
+                  </p>
+                  <p className="text-body-sm text-on-surface-variant whitespace-pre-wrap line-clamp-3">
+                    {e.body}
+                  </p>
+                </div>
+                {e.status === "draft" ? (
+                  e.lead?.contact?.email ? (
+                    <EmailSendButton campaignId={campaign.id} emailId={e.id} />
+                  ) : (
+                    <span className="font-mono text-label-sm text-on-surface-variant shrink-0">No email</span>
+                  )
+                ) : (
+                  <span className="font-mono text-label-sm text-on-surface-variant shrink-0">
+                    {e.sentAt ? e.sentAt.toISOString().split("T")[0] : ""}
+                  </span>
+                )}
               </div>
             ))}
           </div>
