@@ -2,9 +2,11 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
+import { useSidebar } from "@/components/layout/SidebarContext";
 
-export default function TopBar() {
+export default function TopBar({ orgName }: { orgName?: string | null }) {
   const { data: session } = useSession();
+  const { toggle } = useSidebar();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -23,9 +25,18 @@ export default function TopBar() {
     : "?";
 
   return (
-    <header className="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 z-40 bg-surface-container-low/80 backdrop-blur-xl border-b border-outline-variant flex items-center justify-between px-lg">
+    <header className="fixed top-0 right-0 left-0 lg:left-64 h-16 z-40 bg-surface-container-low/80 backdrop-blur-xl border-b border-outline-variant flex items-center justify-between px-lg gap-md">
+      {/* Mobile menu button */}
+      <button
+        onClick={toggle}
+        className="lg:hidden text-on-surface-variant hover:text-primary transition-colors shrink-0"
+        aria-label="Open menu"
+      >
+        <span className="material-symbols-outlined">menu</span>
+      </button>
+
       {/* Search */}
-      <div className="flex items-center bg-surface-container-lowest border border-outline-variant px-md py-xs rounded-xl w-96 focus-within:ring-1 focus-within:ring-primary transition-all">
+      <div className="hidden md:flex items-center bg-surface-container-lowest border border-outline-variant px-md py-xs rounded-xl w-full max-w-96 focus-within:ring-1 focus-within:ring-primary transition-all">
         <span className="material-symbols-outlined text-on-surface-variant mr-sm text-body-sm">search</span>
         <input
           className="bg-transparent border-none outline-none text-on-surface placeholder:text-on-surface-variant text-body-sm w-full"
@@ -35,13 +46,17 @@ export default function TopBar() {
       </div>
 
       {/* Right actions */}
-      <div className="flex items-center gap-lg">
-        {/* Org switcher */}
-        <div className="flex items-center gap-sm px-md py-xs border border-outline-variant rounded-xl bg-surface-container-lowest cursor-pointer hover:border-primary transition-colors">
+      <div className="flex items-center gap-lg ml-auto">
+        {/* Workspace name */}
+        <a
+          href="/settings"
+          className="hidden sm:flex items-center gap-sm px-md py-xs border border-outline-variant rounded-xl bg-surface-container-lowest hover:border-primary transition-colors"
+        >
           <span className="material-symbols-outlined text-primary text-body-sm">apartment</span>
-          <span className="font-mono text-label-sm text-on-surface-variant">Enterprise Global</span>
-          <span className="material-symbols-outlined text-on-surface-variant text-body-sm">expand_more</span>
-        </div>
+          <span className="font-mono text-label-sm text-on-surface-variant truncate max-w-[10rem]">
+            {orgName ?? "Workspace"}
+          </span>
+        </a>
 
         <div className="flex items-center gap-md border-l border-outline-variant pl-lg">
           {/* Live badge */}
