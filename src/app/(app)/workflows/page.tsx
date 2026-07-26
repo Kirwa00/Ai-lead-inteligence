@@ -1,91 +1,121 @@
-const workflowSteps = [
-  { label: "Receive Campaign", icon: "inbox", status: "done" },
-  { label: "Understand ICP", icon: "manage_search", status: "done" },
-  { label: "Research Companies", icon: "travel_explore", status: "active" },
-  { label: "Extract Contacts", icon: "contacts", status: "pending" },
-  { label: "Verify Emails", icon: "mark_email_read", status: "pending" },
-  { label: "Score Leads", icon: "verified", status: "pending" },
-  { label: "Store in Database", icon: "storage", status: "pending" },
-  { label: "Generate Outreach", icon: "send", status: "pending" },
-  { label: "Human Approval", icon: "how_to_reg", status: "pending" },
-  { label: "Launch Campaign", icon: "rocket_launch", status: "pending" },
-  { label: "Monitor Replies", icon: "forum", status: "pending" },
-  { label: "Generate Reports", icon: "assessment", status: "pending" },
-];
+import Link from "next/link";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { AGENTS } from "@/lib/agents";
 
-const statusStyle: Record<string, { icon: string; color: string; ring: string }> = {
-  done: { icon: "check_circle", color: "text-primary bg-primary/10 border-primary/30", ring: "ring-primary/20" },
-  active: { icon: "pending", color: "text-secondary bg-secondary/10 border-secondary/30", ring: "ring-secondary/20 animate-status-pulse" },
-  pending: { icon: "radio_button_unchecked", color: "text-on-surface-variant bg-surface-container-high border-outline-variant", ring: "" },
+export const dynamic = "force-dynamic";
+
+const statusStyle: Record<string, { icon: string; color: string }> = {
+  succeeded: { icon: "check_circle", color: "text-primary bg-primary/10 border-primary/30" },
+  running: { icon: "progress_activity", color: "text-secondary bg-secondary/10 border-secondary/30 animate-status-pulse" },
+  queued: { icon: "pending", color: "text-secondary bg-secondary/10 border-secondary/30" },
+  failed: { icon: "error", color: "text-error bg-error/10 border-error/30" },
 };
 
-export default function WorkflowsPage() {
+function timeAgo(date: Date): string {
+  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+export default async function WorkflowsPage() {
+  const session = await auth();
+  const orgId = (session?.user as { organizationId?: string } | undefined)?.organizationId;
+
+  const jobs = orgId
+    ? await prisma.agentJob.findMany({
+        where: { organizationId: orgId },
+        include: { campaign: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      })
+    : [];
+
+  const runningNow = jobs.filter((j) => j.status === "queued" || j.status === "running");
+
   return (
     <div className="space-y-lg py-lg">
       <div>
-        <h1 className="text-headline-lg font-bold text-on-surface tracking-tight mb-xs">Workflow Monitor</h1>
-        <p className="text-body-md text-on-surface-variant">Real-time view of the lead generation pipeline.</p>
+        <h1 className="text-headline-lg font-bold text-on-surface tracking-tight mb-xs">Activity Log</h1>
+        <p className="text-body-md text-on-surface-variant">
+          Real-time history of every AI agent run across your campaigns.
+        </p>
       </div>
 
-      {/* Active workflow */}
-      <div className="bg-surface-container-low border border-outline-variant rounded-xl p-lg ai-glow">
-        <div className="flex justify-between items-center mb-lg">
-          <div>
-            <h2 className="text-headline-sm font-bold text-on-surface">Kenya FinTech Outreach Q3</h2>
-            <span className="font-mono text-label-sm text-on-surface-variant">Step 3 of 12 · Started 2 hours ago</span>
-          </div>
-          <div className="flex items-center gap-xs px-sm py-xs bg-surface-container-high rounded border border-outline-variant">
+      {runningNow.length > 0 && (
+        <div className="bg-surface-container-low border border-outline-variant rounded-xl p-lg ai-glow">
+          <div className="flex items-center gap-xs mb-md">
             <span className="w-2 h-2 bg-primary rounded-full animate-status-pulse" />
-            <span className="font-mono text-label-sm text-primary uppercase">Running</span>
+            <span className="font-mono text-label-sm text-primary uppercase">
+              {runningNow.length} agent{runningNow.length > 1 ? "s" : ""} running now
+            </span>
+          </div>
+          <div className="space-y-sm">
+            {runningNow.map((j) => (
+              <div key={j.id} className="flex items-center justify-between">
+                <span className="text-body-sm text-on-surface">
+                  {AGENTS[j.agentType]?.label ?? j.agentType} · {j.campaign?.name ?? "Unknown campaign"}
+                </span>
+                <span className="font-mono text-label-sm text-secondary">{timeAgo(j.createdAt)}</span>
+              </div>
+            ))}
           </div>
         </div>
+      )}
 
-        {/* Pipeline steps */}
-        <div className="relative">
-          {/* Vertical line */}
-          <div className="absolute left-5 top-0 bottom-0 w-px bg-outline-variant" />
-          <div className="space-y-sm">
-            {workflowSteps.map((step, i) => {
-              const st = statusStyle[step.status];
+      {/* Activity feed */}
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden">
+        <div className="px-lg py-md border-b border-outline-variant">
+          <h2 className="text-headline-sm font-bold text-on-surface">Recent Runs</h2>
+        </div>
+        {jobs.length === 0 ? (
+          <div className="px-lg py-xl text-center">
+            <p className="text-body-sm text-on-surface-variant">
+              No agent activity yet. Run an agent from a campaign to see it logged here.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-outline-variant">
+            {jobs.map((j) => {
+              const st = statusStyle[j.status] ?? statusStyle.queued;
               return (
-                <div key={i} className="flex items-center gap-md relative">
-                  <div className={`w-10 h-10 rounded-xl border flex items-center justify-center z-10 ${st.color}`}>
-                    <span className="material-symbols-outlined text-body-sm" style={step.status !== "pending" ? { fontVariationSettings: "'FILL' 1" } : undefined}>
-                      {step.status === "done" ? "check_circle" : step.status === "active" ? step.icon : step.icon}
+                <div key={j.id} className="px-lg py-md flex items-start gap-md">
+                  <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${st.color}`}>
+                    <span className={`material-symbols-outlined text-body-sm${j.status === "running" ? " animate-spin" : ""}`}>
+                      {st.icon}
                     </span>
                   </div>
-                  <div className="flex-1 flex items-center justify-between">
-                    <span className={`text-body-sm ${step.status === "pending" ? "text-on-surface-variant" : "text-on-surface font-medium"}`}>
-                      {step.label}
-                    </span>
-                    {step.status === "done" && <span className="font-mono text-label-sm text-primary">Completed</span>}
-                    {step.status === "active" && <span className="font-mono text-label-sm text-secondary animate-status-pulse">In Progress</span>}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-md">
+                      <span className="text-body-sm font-medium text-on-surface">
+                        {AGENTS[j.agentType]?.label ?? j.agentType}
+                      </span>
+                      <span className="font-mono text-label-sm text-on-surface-variant shrink-0">
+                        {timeAgo(j.createdAt)}
+                      </span>
+                    </div>
+                    <p className="font-mono text-label-sm text-on-surface-variant truncate">
+                      {j.campaign ? (
+                        <Link href={`/campaigns/${j.campaign.id}`} className="hover:text-primary hover:underline">
+                          {j.campaign.name}
+                        </Link>
+                      ) : (
+                        "Unknown campaign"
+                      )}
+                    </p>
+                    {(j.summary || j.error) && (
+                      <p className="text-body-sm text-on-surface-variant mt-xs line-clamp-2">
+                        {j.error ?? j.summary}
+                      </p>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      </div>
-
-      {/* Live agent log */}
-      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg font-mono text-label-md">
-        <h2 className="text-headline-sm font-bold text-on-surface mb-md">Live Agent Log</h2>
-        <div className="space-y-xs text-on-surface-variant">
-          {[
-            { time: "14:32:01", agent: "Research", msg: "Found 23 FinTech companies matching ICP in Nairobi" },
-            { time: "14:31:48", agent: "Research", msg: "Scanning Crunchbase for Series A+ startups" },
-            { time: "14:31:12", agent: "Research", msg: "Cross-referencing with LinkedIn company data" },
-            { time: "14:30:55", agent: "ICP Analyzer", msg: "ICP definition parsed: FinTech, Kenya, 11–200 emp, CEO/CTO" },
-            { time: "14:30:40", agent: "System", msg: "Campaign workflow started" },
-          ].map(({ time, agent, msg }) => (
-            <div key={time} className="flex gap-md">
-              <span className="text-outline shrink-0">[{time}]</span>
-              <span className="text-secondary shrink-0">[{agent}]</span>
-              <span className="text-on-surface-variant">{msg}</span>
-            </div>
-          ))}
-        </div>
+        )}
       </div>
     </div>
   );
