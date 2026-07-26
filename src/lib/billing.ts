@@ -36,6 +36,12 @@ export const MODEL_PRICING: Record<string, ModelRate> = {
   "claude-opus-4-8": { inputMicrosPerToken: 5, outputMicrosPerToken: 25 },
   "claude-sonnet-5": { inputMicrosPerToken: 3, outputMicrosPerToken: 15 },
   "claude-haiku-4-5": { inputMicrosPerToken: 1, outputMicrosPerToken: 5 },
+  // DeepSeek (LLM_PROVIDER=deepseek). Approximate from memory — VERIFY against
+  // https://api-docs.deepseek.com/quick_start/pricing before relying on this
+  // for real customer billing; DeepSeek also varies price by cache hit/miss
+  // and time of day, which this flat rate does not model.
+  "deepseek-chat": { inputMicrosPerToken: 0.27, outputMicrosPerToken: 1.1 },
+  "deepseek-reasoner": { inputMicrosPerToken: 0.55, outputMicrosPerToken: 2.19 },
 };
 
 // Unknown models bill at the most expensive (Opus) rate so we never undercharge.

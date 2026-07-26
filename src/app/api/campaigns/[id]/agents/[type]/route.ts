@@ -6,6 +6,7 @@ import { getBalanceMicros } from "@/lib/wallet";
 import { RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
 import { AGENTS } from "@/lib/agents";
+import { llmConfigured } from "@/lib/agents/shared";
 
 export const runtime = "nodejs";
 
@@ -28,16 +29,18 @@ export async function POST(_req: Request, { params }: { params: { id: string; ty
   });
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (agent.usesLlm !== false && !llmConfigured()) {
     return NextResponse.json({ error: "AI is not configured." }, { status: 503 });
   }
 
-  const balance = await getBalanceMicros(orgId);
-  if (balance < RESEARCH_RUN_RESERVE_MICROS) {
-    return NextResponse.json(
-      { error: "Not enough credits. Please top up.", mode: "no_credits" },
-      { status: 402 }
-    );
+  if (agent.usesLlm !== false) {
+    const balance = await getBalanceMicros(orgId);
+    if (balance < RESEARCH_RUN_RESERVE_MICROS) {
+      return NextResponse.json(
+        { error: "Not enough credits. Please top up.", mode: "no_credits" },
+        { status: 402 }
+      );
+    }
   }
 
   const inFlight = await prisma.agentJob.findFirst({

@@ -143,7 +143,7 @@ export default function ResearchPage() {
 
           {mode === "demo" && !loading && results && (
             <p className="font-mono text-label-sm text-on-surface-variant text-center">
-              Demo mode · Set <span className="text-primary">ANTHROPIC_API_KEY</span> for live AI results
+              Demo mode · Configure an AI provider for live results
             </p>
           )}
           {mode === "ai" && !loading && results && (

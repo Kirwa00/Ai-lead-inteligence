@@ -24,9 +24,17 @@ export type AgentContext = {
 
 export type AgentResult = { summary: string };
 export type AgentRunner = (ctx: AgentContext) => Promise<AgentResult>;
+export type AgentDef = {
+  label: string;
+  description: string;
+  run: AgentRunner;
+  // Email Verification is pure heuristics — no LLM call, no wallet charge.
+  // Everything else needs a configured provider; default true.
+  usesLlm?: boolean;
+};
 
 // The AI workforce. Add an entry here to expose a new campaign-scoped agent.
-export const AGENTS: Record<string, { label: string; description: string; run: AgentRunner }> = {
+export const AGENTS: Record<string, AgentDef> = {
   research: {
     label: "Research Agent",
     description: "Find companies matching this campaign and add them as leads.",
@@ -48,6 +56,7 @@ export const AGENTS: Record<string, { label: string; description: string; run: A
     label: "Email Verification Agent",
     description: "Validate contact emails (no AI credits used).",
     run: runEmailVerification,
+    usesLlm: false,
   },
   outreach: {
     label: "Outreach Agent",

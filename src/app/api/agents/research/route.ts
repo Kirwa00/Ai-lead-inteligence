@@ -4,9 +4,7 @@ import { z } from "zod";
 import { getBalanceMicros, debitForUsage } from "@/lib/wallet";
 import { microsToUsd, RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
-
-// Kept in sync with the campaign research agent — see RESEARCH_MODEL override.
-const MODEL = process.env.RESEARCH_MODEL || "claude-sonnet-5";
+import { AGENT_MODEL, callAgentJson, llmConfigured } from "@/lib/agents/shared";
 
 const requestSchema = z.object({
   industry: z.string().min(1).max(100),
@@ -24,6 +22,31 @@ type CompanyMatch = {
   fitScore: number;
   signals: string[];
 };
+
+const RESULT_SCHEMA = {
+  type: "object",
+  properties: {
+    companies: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          industry: { type: "string" },
+          geography: { type: "string" },
+          size: { type: "string" },
+          description: { type: "string" },
+          fitScore: { type: "integer" },
+          signals: { type: "array", items: { type: "string" } },
+        },
+        required: ["name", "industry", "geography", "size", "description", "fitScore", "signals"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["companies"],
+  additionalProperties: false,
+} as const;
 
 const demoResults: CompanyMatch[] = [
   {
@@ -91,11 +114,11 @@ export async function POST(req: NextRequest) {
 
   const { industry, geography, companySize, keywords } = parsed.data;
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!llmConfigured()) {
     return NextResponse.json({
       companies: demoResults,
       mode: "demo",
-      message: "Set ANTHROPIC_API_KEY to enable AI-powered research",
+      message: "AI is not configured yet — set the relevant provider API key to enable live research.",
     });
   }
 
@@ -119,54 +142,14 @@ Geography: ${geography}
 Company size: ${companySize ?? "Any"}
 Keywords / focus: ${keywords ?? "General"}
 
-Return a JSON array of company objects. Each object must have exactly these fields:
-- name: string
-- industry: string (specific segment)
-- geography: string (city / country)
-- size: string (employee range, e.g. "51-200")
-- description: string (1-2 sentences)
-- fitScore: number (0-100)
-- signals: string[] (2-3 current buying signals or growth triggers)
-
-Respond with ONLY valid JSON — no markdown, no explanation, just the array.`;
+For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying signals or growth triggers.`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 4096,
-        thinking: { type: "adaptive" },
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Anthropic API returned ${response.status}`);
-    }
-
-    const data = await response.json();
-    const textBlock = (data.content as Array<{ type: string; text?: string }>)?.find(
-      (b) => b.type === "text"
-    );
-    const rawText = textBlock?.text ?? "[]";
-
-    let companies: CompanyMatch[] = [];
-    try {
-      companies = JSON.parse(rawText);
-    } catch {
-      const match = rawText.match(/\[[\s\S]*\]/);
-      if (match) companies = JSON.parse(match[0]);
-    }
+    const { result, usage } = await callAgentJson<{ companies: CompanyMatch[] }>(prompt, RESULT_SCHEMA);
+    const companies = result.companies ?? [];
 
     // Meter the real token usage against the wallet. Metering must never break
     // a successful research response, so failures here are logged, not thrown.
-    const usage = (data.usage ?? {}) as { input_tokens?: number; output_tokens?: number };
     let balanceUsd: number | undefined;
     let costUsd: number | undefined;
     try {
@@ -175,9 +158,9 @@ Respond with ONLY valid JSON — no markdown, no explanation, just the array.`;
         userId,
         feature: "research",
         agentType: "research",
-        model: MODEL,
-        inputTokens: usage.input_tokens ?? 0,
-        outputTokens: usage.output_tokens ?? 0,
+        model: AGENT_MODEL,
+        inputTokens: usage.input_tokens,
+        outputTokens: usage.output_tokens,
       });
       // Customer-facing value: what the run cost them and their remaining balance.
       costUsd = microsToUsd(chargeMicros);
@@ -188,7 +171,7 @@ Respond with ONLY valid JSON — no markdown, no explanation, just the array.`;
 
     return NextResponse.json({ companies, mode: "ai", costUsd, balanceUsd });
   } catch (err) {
-    console.error("[research-agent] Anthropic error:", err);
+    console.error("[research-agent] LLM error:", err);
     return NextResponse.json({ companies: demoResults, mode: "demo_fallback" });
   }
 }

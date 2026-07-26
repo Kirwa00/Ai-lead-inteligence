@@ -1,11 +1,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { debitForUsage } from "@/lib/wallet";
-import { TX_OPTS } from "@/lib/agents/shared";
-
-// Sonnet 5 is materially cheaper/faster than Opus 4.8, so each credit package
-// buys more runs. Override with RESEARCH_MODEL if lead quality needs Opus.
-export const RESEARCH_MODEL = process.env.RESEARCH_MODEL || "claude-sonnet-5";
+import { AGENT_MODEL, callAgentJson, TX_OPTS } from "@/lib/agents/shared";
 
 export type CompanyMatch = {
   name: string;
@@ -17,7 +13,6 @@ export type CompanyMatch = {
   signals?: string[];
 };
 
-// Guaranteed-valid JSON out — no markdown, no prose, no fragile regex parsing.
 const RESULT_SCHEMA = {
   type: "object",
   properties: {
@@ -54,9 +49,11 @@ type CampaignForResearch = {
 };
 
 /**
- * Runs the Research Agent for a campaign: calls Claude with the campaign's ICP
- * + product context, persists the matches as Company/Lead rows, and meters the
- * token spend against the org's wallet. Returns how many leads were added.
+ * Runs the Research Agent for a campaign: calls the configured LLM (see
+ * src/lib/agents/shared.ts — Anthropic or DeepSeek, switchable via
+ * LLM_PROVIDER) with the campaign's ICP + product context, persists the
+ * matches as Company/Lead rows, and meters the token spend against the org's
+ * wallet. Returns how many leads were added.
  */
 export async function runCampaignResearch(
   campaign: CampaignForResearch,
@@ -76,33 +73,8 @@ ${campaign.context ? `\nWhat we offer / context:\n${campaign.context.slice(0, 60
 Prioritise companies that would genuinely benefit from what we offer.
 For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying signals.`;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": process.env.ANTHROPIC_API_KEY as string,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: RESEARCH_MODEL,
-      max_tokens: 3000,
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: RESULT_SCHEMA },
-      },
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  if (!response.ok) throw new Error(`Anthropic ${response.status}`);
-
-  const data = await response.json();
-  const usage = (data.usage ?? {}) as { input_tokens?: number; output_tokens?: number };
-  const textBlock = (data.content as Array<{ type: string; text?: string }>)?.find(
-    (b) => b.type === "text"
-  );
-  const parsed = JSON.parse(textBlock?.text ?? '{"companies":[]}');
-  const companies: CompanyMatch[] = Array.isArray(parsed) ? parsed : parsed.companies ?? [];
+  const { result, usage } = await callAgentJson<{ companies: CompanyMatch[] }>(prompt, RESULT_SCHEMA);
+  const companies = result.companies ?? [];
 
   // Batched persistence: 3 statements in one transaction rather than ~16
   // sequential round-trips (which dominated latency against a remote DB).
@@ -122,32 +94,35 @@ For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying s
     }));
 
   if (rows.length > 0) {
-    await prisma.$transaction([
-      prisma.company.createMany({
-        data: rows.map((r) => ({
-          id: r.companyId,
-          name: r.name,
-          industry: r.industry,
-          size: r.size,
-          country: r.country,
-          description: r.description,
-        })),
-      }),
-      prisma.lead.createMany({
-        data: rows.map((r) => ({
-          id: r.leadId,
-          campaignId: campaign.id,
-          companyId: r.companyId,
-          score: r.score,
-          status: "uncontacted",
-        })),
-      }),
-      prisma.leadActivity.createMany({
-        data: rows
-          .filter((r) => r.signals)
-          .map((r) => ({ leadId: r.leadId, type: "research", note: r.signals as string })),
-      }),
-    ], TX_OPTS);
+    await prisma.$transaction(
+      [
+        prisma.company.createMany({
+          data: rows.map((r) => ({
+            id: r.companyId,
+            name: r.name,
+            industry: r.industry,
+            size: r.size,
+            country: r.country,
+            description: r.description,
+          })),
+        }),
+        prisma.lead.createMany({
+          data: rows.map((r) => ({
+            id: r.leadId,
+            campaignId: campaign.id,
+            companyId: r.companyId,
+            score: r.score,
+            status: "uncontacted",
+          })),
+        }),
+        prisma.leadActivity.createMany({
+          data: rows
+            .filter((r) => r.signals)
+            .map((r) => ({ leadId: r.leadId, type: "research", note: r.signals as string })),
+        }),
+      ],
+      TX_OPTS
+    );
   }
 
   // Meter the real token usage — never let a metering failure lose the leads.
@@ -157,9 +132,9 @@ For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying s
       userId,
       feature: "campaign_research",
       agentType: "research",
-      model: RESEARCH_MODEL,
-      inputTokens: usage.input_tokens ?? 0,
-      outputTokens: usage.output_tokens ?? 0,
+      model: AGENT_MODEL,
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
     });
   } catch (err) {
     console.error("[research] metering failed:", err);
