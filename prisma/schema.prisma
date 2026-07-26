@@ -24,6 +24,24 @@ model Organization {
   walletTransactions WalletTransaction[]
   usageEvents        UsageEvent[]
   payments           Payment[]
+  invites            Invite[]
+}
+
+// A pending invitation for someone to join an existing Organization (workspace)
+// as a teammate, instead of every signup provisioning its own solo org.
+model Invite {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email           String
+  role            String       @default("member") // member | owner
+  token           String       @unique
+  status          String       @default("pending") // pending | accepted | revoked
+  invitedByUserId String?
+  createdAt       DateTime     @default(now())
+  expiresAt       DateTime
+
+  @@index([organizationId, status])
 }
 
 // A top-up payment via a provider (Stripe / Flutterwave). Credits the wallet

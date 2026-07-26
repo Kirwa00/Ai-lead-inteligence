@@ -1,14 +1,31 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useState, FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, Suspense, FormEvent } from "react";
 import Link from "next/link";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("invite");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [invite, setInvite] = useState<{ valid: boolean; email?: string; organizationName?: string } | null>(null);
+  const [emailInput, setEmailInput] = useState("");
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    fetch(`/api/invites/${inviteToken}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setInvite(data);
+        if (data.valid && data.email) setEmailInput(data.email);
+      })
+      .catch(() => setInvite({ valid: false }));
+  }, [inviteToken]);
+
+  const joiningTeam = invite?.valid === true;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -16,7 +33,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     const fd = new FormData(e.currentTarget);
-    const email = (fd.get("email") as string).trim();
+    const email = (joiningTeam ? invite!.email! : (fd.get("email") as string)).trim();
     const password = fd.get("password") as string;
 
     const res = await fetch("/api/register", {
@@ -27,6 +44,7 @@ export default function RegisterPage() {
         email,
         password,
         workspace: fd.get("workspace"),
+        inviteToken: joiningTeam ? inviteToken : undefined,
       }),
     });
 
@@ -70,10 +88,21 @@ export default function RegisterPage() {
         </div>
 
         <div className="bg-surface-container-low border border-outline-variant rounded-xl p-2xl ai-glow">
-          <h1 className="text-headline-md font-bold text-on-surface mb-xs">Create your account</h1>
+          <h1 className="text-headline-md font-bold text-on-surface mb-xs">
+            {joiningTeam ? `Join ${invite!.organizationName}` : "Create your account"}
+          </h1>
           <p className="text-body-sm text-on-surface-variant mb-xl">
-            Spin up your own AI lead generation workspace.
+            {joiningTeam
+              ? `You've been invited to join this workspace's team.`
+              : "Spin up your own AI lead generation workspace."}
           </p>
+
+          {inviteToken && invite && !invite.valid && (
+            <p className="flex items-center gap-xs text-tertiary font-mono text-label-sm mb-lg">
+              <span className="material-symbols-outlined text-body-sm">info</span>
+              This invite link is invalid or has expired — you can still create your own workspace below.
+            </p>
+          )}
 
           <form className="space-y-md" onSubmit={handleSubmit}>
             <div className="space-y-xs">
@@ -89,18 +118,20 @@ export default function RegisterPage() {
                 placeholder="Jane Mwangi"
               />
             </div>
-            <div className="space-y-xs">
-              <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
-                Workspace name <span className="opacity-60">(optional)</span>
-              </label>
-              <input
-                name="workspace"
-                type="text"
-                autoComplete="organization"
-                className="w-full bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant"
-                placeholder="Acme Growth"
-              />
-            </div>
+            {!joiningTeam && (
+              <div className="space-y-xs">
+                <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
+                  Workspace name <span className="opacity-60">(optional)</span>
+                </label>
+                <input
+                  name="workspace"
+                  type="text"
+                  autoComplete="organization"
+                  className="w-full bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant"
+                  placeholder="Acme Growth"
+                />
+              </div>
+            )}
             <div className="space-y-xs">
               <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
                 Email
@@ -110,7 +141,10 @@ export default function RegisterPage() {
                 type="email"
                 required
                 autoComplete="email"
-                className="w-full bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant"
+                readOnly={joiningTeam}
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                className="w-full bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant read-only:opacity-70"
                 placeholder="you@company.com"
               />
             </div>
@@ -146,7 +180,7 @@ export default function RegisterPage() {
               >
                 {loading ? "progress_activity" : "person_add"}
               </span>
-              {loading ? "Creating account…" : "Create Account"}
+              {loading ? "Creating account…" : joiningTeam ? "Join Workspace" : "Create Account"}
             </button>
           </form>
         </div>
@@ -159,5 +193,13 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
   );
 }

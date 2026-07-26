@@ -1,7 +1,8 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { microsToUsd, valueMicrosToTokenBudgetUsd } from "@/lib/billing";
+import { microsToUsd } from "@/lib/billing";
 import { ProfileForm, ChangePasswordForm } from "@/components/ui/AccountSettings";
+import TeamSection from "@/components/ui/TeamSection";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export default async function SettingsPage() {
           email: true,
           role: true,
           createdAt: true,
+          organizationId: true,
           organization: {
             select: { name: true, slug: true, plan: true, creditBalanceMicros: true },
           },
@@ -47,7 +49,24 @@ export default async function SettingsPage() {
 
   const org = user?.organization;
   const balanceUsd = org ? microsToUsd(org.creditBalanceMicros) : 0;
-  const tokenBudgetUsd = org ? valueMicrosToTokenBudgetUsd(org.creditBalanceMicros) : 0;
+  const isOwner = user?.role === "owner";
+
+  const orgId = user?.organizationId;
+  const [members, invites] = await Promise.all([
+    orgId
+      ? prisma.user.findMany({
+          where: { organizationId: orgId },
+          select: { id: true, name: true, email: true, role: true, createdAt: true },
+          orderBy: { createdAt: "asc" },
+        })
+      : Promise.resolve([]),
+    orgId
+      ? prisma.invite.findMany({
+          where: { organizationId: orgId, status: "pending" },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
+  ]);
 
   return (
     <div className="space-y-lg py-lg max-w-3xl">
@@ -79,8 +98,21 @@ export default async function SettingsPage() {
         <Row label="Plan" value={org?.plan ?? "—"} />
         <div className="border-t border-outline-variant mt-sm pt-md">
           <Row label="Credit Balance" value={`$${balanceUsd.toFixed(2)}`} />
-          <Row label="AI Token Budget" value={`$${tokenBudgetUsd.toFixed(2)} (1/7 of value)`} />
         </div>
+      </Card>
+
+      <Card title="Team" subtitle="Invite teammates to this workspace.">
+        <TeamSection
+          isOwner={isOwner}
+          members={members.map((m) => ({ ...m, createdAt: m.createdAt.toISOString() }))}
+          invites={invites.map((i) => ({
+            id: i.id,
+            email: i.email,
+            role: i.role,
+            createdAt: i.createdAt.toISOString(),
+            expiresAt: i.expiresAt.toISOString(),
+          }))}
+        />
       </Card>
     </div>
   );

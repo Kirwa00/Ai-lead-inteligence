@@ -15,6 +15,7 @@ const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),
   password: z.string().min(8, "Password must be at least 8 characters.").max(200),
   workspace: z.string().trim().max(120).optional(),
+  inviteToken: z.string().trim().min(1).optional(),
 });
 
 function slugify(input: string): string {
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { name, email, password, workspace } = parsed.data;
+  const { name, email, password, workspace, inviteToken } = parsed.data;
 
   const existing = await prisma.user.findUnique({
     where: { email },
@@ -60,30 +61,63 @@ export async function POST(req: Request) {
     );
   }
 
-  const workspaceName =
-    workspace && workspace.length > 0 ? workspace : `${name}'s Workspace`;
-  const slug = `${slugify(workspaceName)}-${randomBytes(3).toString("hex")}`;
+  // Joining via an invite attaches to the existing workspace instead of
+  // provisioning a new one — and skips the free grant (the org already has one).
+  const invite = inviteToken
+    ? await prisma.invite.findUnique({ where: { token: inviteToken } })
+    : null;
+  if (inviteToken) {
+    if (!invite || invite.status !== "pending" || invite.expiresAt < new Date()) {
+      return NextResponse.json({ error: "This invite link is invalid or has expired." }, { status: 400 });
+    }
+    if (invite.email !== email) {
+      return NextResponse.json(
+        { error: "This invite was sent to a different email address." },
+        { status: 400 }
+      );
+    }
+  }
+
   const passwordHash = await hashPassword(password);
 
   try {
-    // A solo signup provisions its own Organization (workspace) with the
-    // registrant as owner. Billing later attaches at the Organization level.
-    await prisma.$transaction(async (tx) => {
-      const org = await tx.organization.create({
-        data: { name: workspaceName, slug, plan: "free" },
+    if (invite) {
+      await prisma.$transaction(async (tx) => {
+        await tx.user.create({
+          data: {
+            email,
+            name,
+            passwordHash,
+            role: invite.role,
+            organizationId: invite.organizationId,
+          },
+        });
+        await tx.invite.update({ where: { id: invite.id }, data: { status: "accepted" } });
       });
-      await tx.user.create({
-        data: {
-          email,
-          name,
-          passwordHash,
-          role: "owner",
-          organizationId: org.id,
-        },
+    } else {
+      const workspaceName =
+        workspace && workspace.length > 0 ? workspace : `${name}'s Workspace`;
+      const slug = `${slugify(workspaceName)}-${randomBytes(3).toString("hex")}`;
+
+      // A solo signup provisions its own Organization (workspace) with the
+      // registrant as owner. Billing later attaches at the Organization level.
+      await prisma.$transaction(async (tx) => {
+        const org = await tx.organization.create({
+          data: { name: workspaceName, slug, plan: "free" },
+        });
+        await tx.user.create({
+          data: {
+            email,
+            name,
+            passwordHash,
+            role: "owner",
+            organizationId: org.id,
+          },
+        });
+        // Free starter grant so new workspaces can try the AI agents before paying.
+        await grantCredits(tx, org.id, FREE_GRANT_MICROS, "Free starter credits");
       });
-      // Free starter grant so new workspaces can try the AI agents before paying.
-      await grantCredits(tx, org.id, FREE_GRANT_MICROS, "Free starter credits");
-    });
+    }
   } catch (err) {
     // Unique-constraint race (email or slug) or any other write failure.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
