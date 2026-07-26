@@ -5,13 +5,14 @@ import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import { useSidebar } from "@/components/layout/SidebarContext";
 
+// Core get-leads-and-follow-up loop only. AI Workforce/Activity Log are
+// secondary observability views (still reachable directly, not in primary
+// nav); Research Agent's standalone page is a disconnected demo that
+// doesn't persist anything — the real Research Agent runs per-campaign.
 const navItems = [
   { href: "/dashboard", icon: "dashboard", label: "Dashboard" },
   { href: "/campaigns", icon: "precision_manufacturing", label: "Campaign Builder" },
   { href: "/leads", icon: "person_search", label: "Lead Explorer" },
-  { href: "/research", icon: "travel_explore", label: "Research Agent" },
-  { href: "/workforce", icon: "smart_toy", label: "AI Workforce" },
-  { href: "/workflows", icon: "analytics", label: "Activity Log" },
   { href: "/reports", icon: "assessment", label: "Reports" },
   { href: "/billing", icon: "credit_card", label: "Billing" },
 ];
