@@ -108,6 +108,9 @@ model Campaign {
   companySize    String?
   targetTitles   String[]
   keywords       String[]
+  // Which agent types (from the AGENTS registry) this campaign's wizard
+  // selected. Empty means "not chosen yet" — UI falls back to running any.
+  enabledAgents  String[]     @default([])
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leads          Lead[]

@@ -7,6 +7,7 @@ import AgentRunButton from "@/components/ui/AgentRunButton";
 import CampaignDeleteButton from "@/components/ui/CampaignDeleteButton";
 import EmailSendButton from "@/components/ui/EmailSendButton";
 import { AGENTS } from "@/lib/agents";
+import { ESTIMATED_COST_USD } from "@/lib/agents/cost-estimates";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,24 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
     { label: "Meetings", value: meetings },
     { label: "Progress", value: `${progress}%` },
   ];
+
+  const hasLeads = campaign.leads.length > 0;
+  const hasContacts = campaign.leads.some((l) => l.contactId);
+  const hasSentEmails = campaign.emails.some((e) => e.status === "sent");
+
+  const prerequisiteWarnings: Record<string, string> = {
+    qualification: !hasLeads ? "Run Research first to add leads to qualify." : "",
+    contact_discovery: !hasLeads ? "Run Research first to add leads." : "",
+    email_verification: !hasContacts ? "Run Contact Discovery first to find contacts." : "",
+    outreach: !hasContacts ? "Run Contact Discovery first so there's someone to email." : "",
+    followup: !hasSentEmails ? "Run Outreach and send at least one email first." : "",
+    reporting: !hasLeads ? "Run other agents first — there's no activity to report on yet." : "",
+  };
+
+  // Legacy campaigns created before agent selection existed run every agent;
+  // new ones only show the agents the wizard assigned.
+  const visibleAgentTypes =
+    campaign.enabledAgents.length > 0 ? campaign.enabledAgents.filter((t) => t in AGENTS) : Object.keys(AGENTS);
 
   return (
     <div className="space-y-lg py-lg max-w-5xl">
@@ -122,17 +141,24 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
         <div className="bg-surface-container-low border border-outline-variant rounded-xl p-lg space-y-sm">
           <h2 className="text-headline-sm font-semibold text-on-surface">AI Workforce</h2>
           <p className="text-body-sm text-on-surface-variant">
-            Agents run on this campaign&apos;s ICP &amp; context, in the background.
+            Numbered in recommended run order. Agents run on this campaign&apos;s ICP &amp; context, in the background.
           </p>
-          {Object.entries(AGENTS).map(([type, a]) => (
-            <AgentRunButton
-              key={type}
-              campaignId={campaign.id}
-              type={type}
-              label={a.label}
-              description={a.description}
-            />
-          ))}
+          {visibleAgentTypes.map((type, i) => {
+            const a = AGENTS[type];
+            if (!a) return null;
+            return (
+              <AgentRunButton
+                key={type}
+                campaignId={campaign.id}
+                type={type}
+                label={a.label}
+                description={a.description}
+                order={i + 1}
+                estCost={ESTIMATED_COST_USD[type]}
+                prerequisiteWarning={prerequisiteWarnings[type]}
+              />
+            );
+          })}
         </div>
       </div>
 

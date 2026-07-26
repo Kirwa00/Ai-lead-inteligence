@@ -11,13 +11,17 @@ const steps = [
   { id: 4, label: "Review", icon: "fact_check" },
 ];
 
+// Mirrors src/lib/agents/index.ts AGENTS registry. Kept as a plain client-side
+// list (rather than importing the registry) because that module pulls in
+// server-only agent implementations that must not end up in the client bundle.
 const AGENT_LIST = [
-  { name: "Research Agent", icon: "travel_explore", description: "Discovers matching companies from web & directories." },
-  { name: "Qualification Agent", icon: "verified", description: "Scores and ranks companies against your ICP." },
-  { name: "Contact Discovery", icon: "contacts", description: "Finds decision-makers and their emails." },
-  { name: "Email Verification", icon: "mark_email_read", description: "Validates emails before sending." },
-  { name: "Outreach Agent", icon: "send", description: "Writes personalised outreach messages." },
-  { name: "Follow-up Agent", icon: "reply_all", description: "Automates intelligent follow-up sequences." },
+  { type: "research", name: "Research Agent", icon: "travel_explore", description: "Discovers matching companies from web & directories. Runs first." },
+  { type: "qualification", name: "Qualification Agent", icon: "verified", description: "Scores and ranks companies against your ICP." },
+  { type: "contact_discovery", name: "Contact Discovery Agent", icon: "contacts", description: "Finds decision-makers and their emails." },
+  { type: "email_verification", name: "Email Verification Agent", icon: "mark_email_read", description: "Validates emails before sending (no AI credits used)." },
+  { type: "outreach", name: "Outreach Agent", icon: "send", description: "Writes personalised outreach messages." },
+  { type: "followup", name: "Follow-up Agent", icon: "reply_all", description: "Automates intelligent follow-up sequences." },
+  { type: "reporting", name: "Reporting Agent", icon: "assessment", description: "Summarises campaign performance with recommendations." },
 ];
 
 type Form = {
@@ -47,9 +51,9 @@ const defaultForm: Form = {
   targetTitle: "",
   keywords: "",
   exclusions: "",
-  agents: Object.fromEntries(
-    AGENT_LIST.map((a, i) => [a.name, i < 5])
-  ),
+  // All agents assigned by default — the wizard only auto-runs Research on
+  // launch; the rest are run manually in order from the campaign page.
+  agents: Object.fromEntries(AGENT_LIST.map((a) => [a.type, true])),
 };
 
 const inputClass =
@@ -68,6 +72,7 @@ export default function NewCampaignPage() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<Form>(defaultForm);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [attachName, setAttachName] = useState("");
   const [attachNote, setAttachNote] = useState("");
   const router = useRouter();
@@ -98,14 +103,15 @@ export default function NewCampaignPage() {
     }
   }
 
-  function toggleAgent(name: string) {
-    setForm((f) => ({ ...f, agents: { ...f.agents, [name]: !f.agents[name] } }));
+  function toggleAgent(type: string) {
+    setForm((f) => ({ ...f, agents: { ...f.agents, [type]: !f.agents[type] } }));
   }
 
   async function launch() {
     setLoading(true);
+    setError("");
     try {
-      await fetch("/api/campaigns", {
+      const res = await fetch("/api/campaigns", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -118,10 +124,25 @@ export default function NewCampaignPage() {
           companySize: form.companySize,
           targetTitles: form.targetTitle,
           keywords: form.keywords,
+          agents: Object.entries(form.agents).filter(([, enabled]) => enabled).map(([type]) => type),
         }),
       });
-      router.push("/campaigns");
-    } catch {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Could not create the campaign. Please try again."
+        );
+      }
+      const id = data.campaign?.id as string | undefined;
+      if (!id) throw new Error("Campaign created, but couldn't open it. Check the campaign list.");
+
+      // Match the Review step's promise: launching kicks off Research immediately.
+      if (form.agents.research) {
+        fetch(`/api/campaigns/${id}/agents/research`, { method: "POST" }).catch(() => {});
+      }
+      router.push(`/campaigns/${id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not create the campaign.");
       setLoading(false);
     }
   }
@@ -323,12 +344,15 @@ export default function NewCampaignPage() {
             <p className="text-body-sm text-on-surface-variant">Select which agents will run in this campaign.</p>
             <div className="space-y-sm">
               {AGENT_LIST.map((a) => {
-                const enabled = form.agents[a.name];
+                const enabled = form.agents[a.type];
                 return (
-                  <div
-                    key={a.name}
-                    onClick={() => toggleAgent(a.name)}
-                    className={`flex items-center gap-md p-md rounded-xl border transition-colors cursor-pointer ${
+                  <button
+                    key={a.type}
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    onClick={() => toggleAgent(a.type)}
+                    className={`w-full flex items-center gap-md p-md rounded-xl border transition-colors text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                       enabled
                         ? "border-primary/30 bg-primary/5"
                         : "border-outline-variant bg-surface-container-high"
@@ -345,7 +369,7 @@ export default function NewCampaignPage() {
                       <div className="font-mono text-label-sm text-on-surface-variant">{a.description}</div>
                     </div>
                     <div
-                      className={`w-10 h-5 rounded-full relative transition-colors ${
+                      className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${
                         enabled ? "bg-primary" : "bg-surface-container-highest"
                       }`}
                     >
@@ -355,7 +379,7 @@ export default function NewCampaignPage() {
                         }`}
                       />
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -395,12 +419,21 @@ export default function NewCampaignPage() {
                 info
               </span>
               <p className="text-body-sm text-on-surface-variant">
-                Launching will start the Research Agent immediately. You can pause or edit the campaign at any time.
+                {form.agents.research
+                  ? "Launching will start the Research Agent immediately to find your first leads. Run the other assigned agents manually from the campaign page, in order."
+                  : "Launching will create the campaign as a draft. Research is not selected, so you'll need to run agents manually from the campaign page."}
               </p>
             </div>
           </div>
         )}
       </div>
+
+      {error && (
+        <p className="flex items-center gap-xs font-mono text-label-sm text-error">
+          <span className="material-symbols-outlined text-body-sm">error</span>
+          {error}
+        </p>
+      )}
 
       {/* Nav buttons */}
       <div className="flex justify-between">

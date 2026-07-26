@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import type { Session } from "next-auth";
+import { AGENTS } from "@/lib/agents";
 
 function getOrgId(session: Session | null) {
   return (session?.user as { organizationId?: string } | undefined)?.organizationId;
@@ -48,6 +49,7 @@ const createSchema = z.object({
   companySize: z.string().optional(),
   targetTitles: z.string().optional(),
   keywords: z.string().optional(),
+  agents: z.array(z.string()).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -60,13 +62,15 @@ export async function POST(req: NextRequest) {
   const parsed = createSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-  const { targetTitles, keywords, ...rest } = parsed.data;
+  const { targetTitles, keywords, agents, ...rest } = parsed.data;
+  const enabledAgents = (agents ?? []).filter((a) => a in AGENTS);
 
   const campaign = await prisma.campaign.create({
     data: {
       ...rest,
       targetTitles: targetTitles ? targetTitles.split(",").map((s) => s.trim()).filter(Boolean) : [],
       keywords: keywords ? keywords.split(",").map((s) => s.trim()).filter(Boolean) : [],
+      enabledAgents,
       organizationId: oid,
     },
   });

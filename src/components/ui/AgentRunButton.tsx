@@ -10,11 +10,17 @@ export default function AgentRunButton({
   type,
   label,
   description,
+  order,
+  estCost,
+  prerequisiteWarning,
 }: {
   campaignId: string;
   type: string;
   label: string;
   description: string;
+  order?: number;
+  estCost?: string;
+  prerequisiteWarning?: string;
 }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -81,8 +87,18 @@ export default function AgentRunButton({
     <div className="rounded-xl border border-outline-variant bg-surface-container-high p-md space-y-xs">
       <div className="flex items-center justify-between gap-md">
         <div>
-          <div className="text-body-sm font-semibold text-on-surface">{label}</div>
+          <div className="flex items-center gap-xs">
+            {order !== undefined && (
+              <span className="w-5 h-5 rounded-full bg-surface-container-highest border border-outline-variant text-label-sm font-mono font-bold flex items-center justify-center text-on-surface-variant shrink-0">
+                {order}
+              </span>
+            )}
+            <span className="text-body-sm font-semibold text-on-surface">{label}</span>
+          </div>
           <div className="font-mono text-label-sm text-on-surface-variant">{description}</div>
+          {estCost && (
+            <div className="font-mono text-label-sm text-on-surface-variant mt-xs">Est. cost: {estCost}</div>
+          )}
         </div>
         <button
           onClick={start}
@@ -105,6 +121,12 @@ export default function AgentRunButton({
         <p className="flex items-center gap-xs font-mono text-label-sm text-error">
           <span className="material-symbols-outlined text-body-sm">error</span>
           {msg}
+        </p>
+      )}
+      {phase === "idle" && prerequisiteWarning && (
+        <p className="flex items-center gap-xs font-mono text-label-sm text-tertiary">
+          <span className="material-symbols-outlined text-body-sm">info</span>
+          {prerequisiteWarning}
         </p>
       )}
     </div>
