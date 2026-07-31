@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { debitForUsage } from "@/lib/wallet";
-import { AGENT_MODEL, callAgentJson, TX_OPTS } from "@/lib/agents/shared";
+import { callAgentJson, TX_OPTS } from "@/lib/agents/shared";
 
 export type CompanyMatch = {
   name: string;
@@ -58,7 +58,8 @@ type CampaignForResearch = {
 export async function runCampaignResearch(
   campaign: CampaignForResearch,
   organizationId: string,
-  userId?: string | null
+  userId?: string | null,
+  llmProvider?: string | null
 ): Promise<number> {
   const prompt = `You are an expert B2B lead research agent specializing in African markets.
 Find the top 5-8 companies that best match this campaign's ideal customer profile.
@@ -73,7 +74,12 @@ ${campaign.context ? `\nWhat we offer / context:\n${campaign.context.slice(0, 60
 Prioritise companies that would genuinely benefit from what we offer.
 For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying signals.`;
 
-  const { result, usage } = await callAgentJson<{ companies: CompanyMatch[] }>(prompt, RESULT_SCHEMA);
+  const { result, usage, model } = await callAgentJson<{ companies: CompanyMatch[] }>(
+    prompt,
+    RESULT_SCHEMA,
+    3000,
+    llmProvider
+  );
   const companies = result.companies ?? [];
 
   // Batched persistence: 3 statements in one transaction rather than ~16
@@ -132,7 +138,7 @@ For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying s
       userId,
       feature: "campaign_research",
       agentType: "research",
-      model: AGENT_MODEL,
+      model,
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
     });

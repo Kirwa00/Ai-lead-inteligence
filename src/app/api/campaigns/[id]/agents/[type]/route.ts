@@ -7,6 +7,7 @@ import { RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
 import { AGENTS } from "@/lib/agents";
 import { llmConfigured } from "@/lib/agents/shared";
+import { getOrgLlmProvider } from "@/lib/llm-provider";
 
 export const runtime = "nodejs";
 
@@ -29,7 +30,9 @@ export async function POST(_req: Request, { params }: { params: { id: string; ty
   });
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
 
-  if (agent.usesLlm !== false && !llmConfigured()) {
+  const llmProvider = await getOrgLlmProvider(orgId);
+
+  if (agent.usesLlm !== false && !llmConfigured(llmProvider)) {
     return NextResponse.json({ error: "AI is not configured." }, { status: 503 });
   }
 
@@ -64,6 +67,7 @@ export async function POST(_req: Request, { params }: { params: { id: string; ty
     },
     organizationId: orgId,
     userId,
+    llmProvider,
   };
 
   waitUntil(

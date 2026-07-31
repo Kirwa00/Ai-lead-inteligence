@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { debitForUsage } from "@/lib/wallet";
-import { AGENT_MODEL, callAgentJson, TX_OPTS } from "@/lib/agents/shared";
+import { callAgentJson, TX_OPTS } from "@/lib/agents/shared";
 import type { AgentContext, AgentResult } from "@/lib/agents";
 
 const SCHEMA = {
@@ -54,7 +54,12 @@ For each company return: company (exact name as given), score 0-100, qualified (
 Companies:
 ${list}`;
 
-  const { result, usage } = await callAgentJson<{ evaluations: Evaluation[] }>(prompt, SCHEMA);
+  const { result, usage, model } = await callAgentJson<{ evaluations: Evaluation[] }>(
+    prompt,
+    SCHEMA,
+    3000,
+    ctx.llmProvider
+  );
 
   const byName = new Map(result.evaluations.map((e) => [e.company.trim().toLowerCase(), e]));
   let qualified = 0;
@@ -95,7 +100,7 @@ ${list}`;
       userId: ctx.userId,
       feature: "qualification",
       agentType: "qualification",
-      model: AGENT_MODEL,
+      model,
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
     });

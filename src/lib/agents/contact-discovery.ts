@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { debitForUsage } from "@/lib/wallet";
-import { AGENT_MODEL, callAgentJson, TX_OPTS } from "@/lib/agents/shared";
+import { callAgentJson, TX_OPTS } from "@/lib/agents/shared";
 import type { AgentContext, AgentResult } from "@/lib/agents";
 
 const SCHEMA = {
@@ -51,7 +51,12 @@ Return company (exact name), firstName, lastName, a relevant senior title, and a
 Companies:
 ${list}`;
 
-  const { result, usage } = await callAgentJson<{ contacts: Found[] }>(prompt, SCHEMA);
+  const { result, usage, model } = await callAgentJson<{ contacts: Found[] }>(
+    prompt,
+    SCHEMA,
+    3000,
+    ctx.llmProvider
+  );
   const byName = new Map(result.contacts.map((c) => [c.company.trim().toLowerCase(), c]));
 
   const writes: Prisma.PrismaPromise<unknown>[] = [];
@@ -84,7 +89,7 @@ ${list}`;
       userId: ctx.userId,
       feature: "contact_discovery",
       agentType: "contact_discovery",
-      model: AGENT_MODEL,
+      model,
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
     });

@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { debitForUsage } from "@/lib/wallet";
-import { AGENT_MODEL, callAgentJson, TX_OPTS } from "@/lib/agents/shared";
+import { callAgentJson, TX_OPTS } from "@/lib/agents/shared";
 import type { AgentContext, AgentResult } from "@/lib/agents";
 
 const SCHEMA = {
@@ -55,7 +55,12 @@ Return company (exact name), subject, and body for each.
 Leads:
 ${list}`;
 
-  const { result, usage } = await callAgentJson<{ emails: Draft[] }>(prompt, SCHEMA);
+  const { result, usage, model } = await callAgentJson<{ emails: Draft[] }>(
+    prompt,
+    SCHEMA,
+    3000,
+    ctx.llmProvider
+  );
   const byName = new Map(result.emails.map((e) => [e.company.trim().toLowerCase(), e]));
 
   const writes: Prisma.PrismaPromise<unknown>[] = [];
@@ -84,7 +89,7 @@ ${list}`;
       userId: ctx.userId,
       feature: "outreach",
       agentType: "outreach",
-      model: AGENT_MODEL,
+      model,
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
     });

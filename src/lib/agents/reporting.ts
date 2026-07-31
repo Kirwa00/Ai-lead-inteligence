@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { debitForUsage } from "@/lib/wallet";
-import { AGENT_MODEL, callAgentJson } from "@/lib/agents/shared";
+import { callAgentJson } from "@/lib/agents/shared";
 import type { AgentContext, AgentResult } from "@/lib/agents";
 
 const SCHEMA = {
@@ -33,10 +33,11 @@ export async function runReporting(ctx: AgentContext): Promise<AgentResult> {
 Campaign: ${ctx.campaign.name} — ${ctx.campaign.industry ?? ""}, ${ctx.campaign.geography ?? ""}.
 Metrics: ${JSON.stringify(metrics)}`;
 
-  const { result, usage } = await callAgentJson<{ summary: string; recommendations: string[] }>(
+  const { result, usage, model } = await callAgentJson<{ summary: string; recommendations: string[] }>(
     prompt,
     SCHEMA,
-    1500
+    1500,
+    ctx.llmProvider
   );
 
   await prisma.report.create({
@@ -54,7 +55,7 @@ Metrics: ${JSON.stringify(metrics)}`;
       userId: ctx.userId,
       feature: "reporting",
       agentType: "reporting",
-      model: AGENT_MODEL,
+      model,
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
     });

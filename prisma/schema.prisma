@@ -11,6 +11,8 @@ model Organization {
   name        String
   slug        String       @unique
   plan        String       @default("free")
+  // Which LLM provider this workspace uses for AI agents: "anthropic" | "deepseek".
+  llmProvider String       @default("anthropic")
   // Prepaid wallet balance in micro-USD (1e-6 USD) of raw Anthropic token budget.
   // The 7x markup is applied at purchase time; the meter debits real token cost.
   creditBalanceMicros BigInt @default(0)

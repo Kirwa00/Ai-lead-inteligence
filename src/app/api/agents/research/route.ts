@@ -4,7 +4,8 @@ import { z } from "zod";
 import { getBalanceMicros, debitForUsage } from "@/lib/wallet";
 import { microsToUsd, RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
-import { AGENT_MODEL, callAgentJson, llmConfigured } from "@/lib/agents/shared";
+import { callAgentJson, llmConfigured } from "@/lib/agents/shared";
+import { getOrgLlmProvider } from "@/lib/llm-provider";
 
 const requestSchema = z.object({
   industry: z.string().min(1).max(100),
@@ -114,7 +115,9 @@ export async function POST(req: NextRequest) {
 
   const { industry, geography, companySize, keywords } = parsed.data;
 
-  if (!llmConfigured()) {
+  const llmProvider = await getOrgLlmProvider(orgId);
+
+  if (!llmConfigured(llmProvider)) {
     return NextResponse.json({
       companies: demoResults,
       mode: "demo",
@@ -145,7 +148,12 @@ Keywords / focus: ${keywords ?? "General"}
 For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying signals or growth triggers.`;
 
   try {
-    const { result, usage } = await callAgentJson<{ companies: CompanyMatch[] }>(prompt, RESULT_SCHEMA);
+    const { result, usage, model } = await callAgentJson<{ companies: CompanyMatch[] }>(
+      prompt,
+      RESULT_SCHEMA,
+      3000,
+      llmProvider
+    );
     const companies = result.companies ?? [];
 
     // Meter the real token usage against the wallet. Metering must never break
@@ -158,7 +166,7 @@ For each: a 1-2 sentence description, a fitScore 0-100, and 2-3 current buying s
         userId,
         feature: "research",
         agentType: "research",
-        model: AGENT_MODEL,
+        model,
         inputTokens: usage.input_tokens,
         outputTokens: usage.output_tokens,
       });

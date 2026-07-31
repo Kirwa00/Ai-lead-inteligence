@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { microsToUsd } from "@/lib/billing";
 import { ProfileForm, ChangePasswordForm } from "@/components/ui/AccountSettings";
 import TeamSection from "@/components/ui/TeamSection";
+import LlmProviderToggle from "@/components/ui/LlmProviderToggle";
+import { llmProvidersAvailable, resolveLlmProvider, type LlmProvider } from "@/lib/agents/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +43,7 @@ export default async function SettingsPage() {
           createdAt: true,
           organizationId: true,
           organization: {
-            select: { name: true, slug: true, plan: true, creditBalanceMicros: true },
+            select: { name: true, slug: true, plan: true, creditBalanceMicros: true, llmProvider: true },
           },
         },
       })
@@ -50,6 +52,8 @@ export default async function SettingsPage() {
   const org = user?.organization;
   const balanceUsd = org ? microsToUsd(org.creditBalanceMicros) : 0;
   const isOwner = user?.role === "owner";
+  const llmProvider = resolveLlmProvider(org?.llmProvider) as LlmProvider;
+  const llmAvailable = llmProvidersAvailable();
 
   const orgId = user?.organizationId;
   const [members, invites] = await Promise.all([
@@ -91,6 +95,10 @@ export default async function SettingsPage() {
 
       <Card title="Security" subtitle="Change your password.">
         <ChangePasswordForm />
+      </Card>
+
+      <Card title="AI Provider" subtitle="Choose Claude or DeepSeek for your AI agents.">
+        <LlmProviderToggle initialProvider={llmProvider} available={llmAvailable} isOwner={isOwner} />
       </Card>
 
       <Card title="Workspace" subtitle="Your organisation and credit balance.">

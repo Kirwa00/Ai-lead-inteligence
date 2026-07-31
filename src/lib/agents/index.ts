@@ -20,6 +20,7 @@ export type AgentContext = {
   campaign: AgentCampaign;
   organizationId: string;
   userId?: string | null;
+  llmProvider?: string | null;
 };
 
 export type AgentResult = { summary: string };
@@ -39,7 +40,7 @@ export const AGENTS: Record<string, AgentDef> = {
     label: "Research Agent",
     description: "Find companies matching this campaign and add them as leads.",
     run: async (ctx) => ({
-      summary: `Added ${await runCampaignResearch(ctx.campaign, ctx.organizationId, ctx.userId)} leads.`,
+      summary: `Added ${await runCampaignResearch(ctx.campaign, ctx.organizationId, ctx.userId, ctx.llmProvider)} leads.`,
     }),
   },
   qualification: {
