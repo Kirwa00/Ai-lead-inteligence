@@ -3,9 +3,21 @@
 // in env at once — only the selected provider is used per run.
 export type LlmProvider = "anthropic" | "deepseek";
 
+function normalizeProvider(value?: string | null): LlmProvider | null {
+  const p = (value || "").toLowerCase();
+  if (p === "deepseek") return "deepseek";
+  if (p === "anthropic") return "anthropic";
+  return null;
+}
+
 export function resolveLlmProvider(preferred?: string | null): LlmProvider {
-  const p = (preferred || process.env.LLM_PROVIDER || "anthropic").toLowerCase();
-  return p === "deepseek" ? "deepseek" : "anthropic";
+  const explicit = normalizeProvider(preferred ?? process.env.LLM_PROVIDER);
+  if (explicit === "deepseek" && !!process.env.DEEPSEEK_API_KEY) return "deepseek";
+  if (explicit === "anthropic" && !!process.env.ANTHROPIC_API_KEY) return "anthropic";
+
+  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
+  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  return "anthropic";
 }
 
 export function getAgentModel(provider?: LlmProvider | string | null): string {

@@ -37,7 +37,8 @@ const PROVIDERS: {
 
 export default function LlmProviderToggle({ initialProvider, available, isOwner }: Props) {
   const router = useRouter();
-  const [provider, setProvider] = useState<LlmProvider>(initialProvider);
+  const defaultProvider: LlmProvider = initialProvider === "anthropic" && available.deepseek ? "deepseek" : initialProvider;
+  const [provider, setProvider] = useState<LlmProvider>(defaultProvider);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; msg: string }>({ ok: true, msg: "" });
 
