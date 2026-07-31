@@ -5,6 +5,22 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense, FormEvent } from "react";
 import Link from "next/link";
 
+function WelcomeToast() {
+  return (
+    <div className="mb-lg rounded-xl border border-primary/30 bg-primary-container/20 p-md text-sm text-on-surface">
+      <div className="flex items-start gap-sm">
+        <span className="material-symbols-outlined text-primary">celebration</span>
+        <div>
+          <p className="font-semibold text-on-surface">Welcome! Your workspace is ready.</p>
+          <p className="mt-xs text-on-surface-variant">
+            Create a campaign, add leads, and send your first outreach in just a few minutes.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -103,6 +119,8 @@ function RegisterForm() {
               This invite link is invalid or has expired — you can still create your own workspace below.
             </p>
           )}
+
+          <WelcomeToast />
 
           <form className="space-y-md" onSubmit={handleSubmit}>
             <div className="space-y-xs">

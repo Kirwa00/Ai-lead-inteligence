@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getOnboardingState } from "@/lib/ux";
 
 type Step = { label: string; href: string; done: boolean };
 
@@ -19,12 +20,18 @@ export default function OnboardingChecklist({
 
   const doneCount = steps.filter((s) => s.done).length;
   const nextStep = steps.find((s) => !s.done);
+  const onboardingState = getOnboardingState({ hasCampaign, hasLeads, hasEmailSent });
 
   return (
     <div className="bg-surface-container-low border border-primary/30 rounded-xl p-lg space-y-md">
-      <div className="flex items-center justify-between">
-        <h2 className="text-headline-sm font-semibold text-on-surface">Get your first leads</h2>
-        <span className="font-mono text-label-sm text-on-surface-variant">{doneCount} / {steps.length} done</span>
+      <div className="flex items-center justify-between gap-md">
+        <div>
+          <h2 className="text-headline-sm font-semibold text-on-surface">{onboardingState.headline}</h2>
+          <p className="text-body-sm text-on-surface-variant mt-xs">{onboardingState.body}</p>
+        </div>
+        <span className="font-mono text-label-sm text-on-surface-variant whitespace-nowrap">
+          {onboardingState.progressLabel}
+        </span>
       </div>
       <div className="space-y-sm">
         {steps.map((step) => (
@@ -43,11 +50,11 @@ export default function OnboardingChecklist({
       </div>
       {nextStep && (
         <Link
-          href={nextStep.href}
+          href={onboardingState.ctaHref}
           className="inline-flex items-center gap-xs px-md py-sm bg-primary-container text-on-primary-container font-mono text-label-md font-bold rounded-xl hover:brightness-105 transition-all active:scale-95"
         >
           <span className="material-symbols-outlined text-body-sm">arrow_forward</span>
-          {nextStep.label}
+          {onboardingState.ctaLabel}
         </Link>
       )}
     </div>

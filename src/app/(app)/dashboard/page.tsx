@@ -7,6 +7,7 @@ import ActiveCampaignsList from "@/components/ui/ActiveCampaignsList";
 import OnboardingChecklist from "@/components/ui/OnboardingChecklist";
 import { AGENTS } from "@/lib/agents";
 import { microsToUsd } from "@/lib/billing";
+import { getQuickStartState } from "@/lib/ux";
 
 export const dynamic = "force-dynamic";
 
@@ -119,6 +120,11 @@ export default async function DashboardPage() {
   }));
 
   const showOnboarding = totalCampaigns === 0 || leadStatuses.length === 0 || sentEmailCount === 0;
+  const quickStart = getQuickStartState({
+    hasCampaign: totalCampaigns > 0,
+    hasLeads: leadStatuses.length > 0,
+    hasEmailSent: sentEmailCount > 0,
+  });
 
   return (
     <div className="space-y-lg py-lg">
@@ -137,11 +143,33 @@ export default async function DashboardPage() {
       </div>
 
       {showOnboarding && (
-        <OnboardingChecklist
-          hasCampaign={totalCampaigns > 0}
-          hasLeads={leadStatuses.length > 0}
-          hasEmailSent={sentEmailCount > 0}
-        />
+        <div className="space-y-md animate-[fadeIn_0.35s_ease-out]">
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low p-lg shadow-[0_0_0_1px_rgba(255,255,255,0.02)_inset]">
+            <div className="flex flex-col gap-sm md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-headline-sm font-semibold text-on-surface">{quickStart.title}</h2>
+                <p className="mt-xs text-body-sm text-on-surface-variant">{quickStart.intro}</p>
+              </div>
+              <div className="flex flex-wrap gap-sm">
+                <Link href={quickStart.primaryHref} className="inline-flex items-center gap-xs rounded-xl bg-primary-container px-md py-sm font-mono text-label-md font-bold text-on-primary-container transition-all hover:brightness-105 active:scale-95">
+                  <span className="material-symbols-outlined text-body-sm">rocket_launch</span>
+                  {quickStart.primaryLabel}
+                </Link>
+                <Link href={quickStart.secondaryHref} className="inline-flex items-center gap-xs rounded-xl border border-outline-variant px-md py-sm font-mono text-label-md font-semibold text-on-surface-variant transition-colors hover:border-primary hover:text-primary">
+                  <span className="material-symbols-outlined text-body-sm">list</span>
+                  {quickStart.secondaryLabel}
+                </Link>
+              </div>
+            </div>
+          </div>
+          <div className="animate-[fadeIn_0.45s_ease-out]">
+            <OnboardingChecklist
+              hasCampaign={totalCampaigns > 0}
+              hasLeads={leadStatuses.length > 0}
+              hasEmailSent={sentEmailCount > 0}
+            />
+          </div>
+        </div>
       )}
 
       {/* KPIs */}

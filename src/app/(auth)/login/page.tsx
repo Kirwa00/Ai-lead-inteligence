@@ -107,11 +107,10 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-lg pt-lg border-t border-outline-variant flex items-center justify-center gap-md">
-            <button className="flex items-center gap-sm px-md py-xs border border-outline-variant rounded-xl text-on-surface-variant font-mono text-label-sm hover:border-primary hover:text-primary transition-colors">
-              <span className="material-symbols-outlined text-body-sm">business</span>
-              SSO Login
-            </button>
+          <div className="mt-lg pt-lg border-t border-outline-variant">
+            <p className="text-center text-body-sm text-on-surface-variant">
+              Need team access? Ask your workspace owner to invite you, then sign in with your email and password.
+            </p>
           </div>
         </div>
 
