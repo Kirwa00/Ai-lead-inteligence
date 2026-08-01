@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { randomBytes } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
-import { grantCredits } from "@/lib/wallet";
-import { FREE_GRANT_MICROS } from "@/lib/billing";
 import { rateLimit, clientIp, tooMany } from "@/lib/rate-limit";
+import { issueToken } from "@/lib/tokens";
+import { sendVerificationEmail } from "@/lib/auth-emails";
+import { provisionSoloWorkspace } from "@/lib/provisioning";
 
 export const runtime = "nodejs";
 
@@ -18,16 +18,7 @@ const registerSchema = z.object({
   inviteToken: z.string().trim().min(1).optional(),
 });
 
-function slugify(input: string): string {
-  const base = input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return base || "workspace";
-}
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   // Throttle signups per IP — each account grants real token budget, so this
   // blocks scripted free-grant farming that would drain Anthropic credits.
   const rl = rateLimit(`register:${clientIp(req)}`, 5, 60 * 60 * 1000); // 5 / hour / IP
@@ -79,11 +70,12 @@ export async function POST(req: Request) {
   }
 
   const passwordHash = await hashPassword(password);
+  let newUserId: string | null = null;
 
   try {
     if (invite) {
       await prisma.$transaction(async (tx) => {
-        await tx.user.create({
+        const user = await tx.user.create({
           data: {
             email,
             name,
@@ -92,31 +84,19 @@ export async function POST(req: Request) {
             organizationId: invite.organizationId,
           },
         });
+        newUserId = user.id;
         await tx.invite.update({ where: { id: invite.id }, data: { status: "accepted" } });
       });
     } else {
-      const workspaceName =
-        workspace && workspace.length > 0 ? workspace : `${name}'s Workspace`;
-      const slug = `${slugify(workspaceName)}-${randomBytes(3).toString("hex")}`;
-
       // A solo signup provisions its own Organization (workspace) with the
       // registrant as owner. Billing later attaches at the Organization level.
-      await prisma.$transaction(async (tx) => {
-        const org = await tx.organization.create({
-          data: { name: workspaceName, slug, plan: "free" },
-        });
-        await tx.user.create({
-          data: {
-            email,
-            name,
-            passwordHash,
-            role: "owner",
-            organizationId: org.id,
-          },
-        });
-        // Free starter grant so new workspaces can try the AI agents before paying.
-        await grantCredits(tx, org.id, FREE_GRANT_MICROS, "Free starter credits");
+      const created = await provisionSoloWorkspace({
+        email,
+        name,
+        passwordHash,
+        workspaceName: workspace,
       });
+      newUserId = created.userId;
     }
   } catch (err) {
     // Unique-constraint race (email or slug) or any other write failure.
@@ -133,5 +113,20 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true }, { status: 201 });
+  // Verification is non-blocking: the account works immediately and the app
+  // shows a dismissible reminder banner until confirmed. A mail outage must
+  // never leave someone unable to use an account they just paid to create.
+  let devVerifyUrl: string | undefined;
+  if (newUserId) {
+    try {
+      const raw = await issueToken(newUserId, "email_verify");
+      const url = `${req.nextUrl.origin}/api/auth/verify-email?token=${raw}`;
+      const sent = await sendVerificationEmail(email, url);
+      if (!sent && process.env.NODE_ENV !== "production") devVerifyUrl = url;
+    } catch (err) {
+      console.error("[register] could not issue verification email:", err);
+    }
+  }
+
+  return NextResponse.json({ ok: true, devVerifyUrl }, { status: 201 });
 }

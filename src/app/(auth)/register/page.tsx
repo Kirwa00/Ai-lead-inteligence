@@ -4,6 +4,7 @@ import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect, Suspense, FormEvent } from "react";
 import Link from "next/link";
+import GoogleSignInButton from "@/components/ui/GoogleSignInButton";
 
 function WelcomeToast() {
   return (
@@ -201,6 +202,10 @@ function RegisterForm() {
               {loading ? "Creating account…" : joiningTeam ? "Join Workspace" : "Create Account"}
             </button>
           </form>
+
+          {/* Google always provisions its own workspace, so it can't fulfil an
+              invite — hide it when the user arrived via an invite link. */}
+          {!joiningTeam && <GoogleSignInButton label="Sign up with Google" />}
         </div>
 
         <p className="text-center font-mono text-label-sm text-on-surface-variant mt-lg">
