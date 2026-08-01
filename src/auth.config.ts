@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
+import { isPublicRoute } from "@/lib/public-routes";
 
 // Edge-safe auth config — no Node.js crypto/pg imports
 export const authConfig: NextAuthConfig = {
@@ -10,14 +11,7 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const { pathname } = nextUrl;
-      const isPublic =
-        pathname.startsWith("/login") ||
-        pathname.startsWith("/register") ||
-        pathname.startsWith("/api/auth") ||
-        pathname.startsWith("/api/register") ||
-        pathname.startsWith("/api/webhooks");
-      if (!isLoggedIn && !isPublic) return false;
+      if (!isLoggedIn && !isPublicRoute(nextUrl.pathname)) return false;
       return true;
     },
     jwt({ token, user }) {
