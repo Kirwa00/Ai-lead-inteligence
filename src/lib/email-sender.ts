@@ -21,8 +21,14 @@ export async function sendEmail(opts: {
   to: string;
   subject: string;
   text: string;
+  /**
+   * Overrides the platform sender. Outreach passes the workspace's own
+   * verified address here; system mail (invites, password resets) leaves it
+   * unset so it keeps coming from the platform.
+   */
+  from?: string | null;
 }): Promise<{ id: string }> {
-  const from = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const from = opts.from || process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",

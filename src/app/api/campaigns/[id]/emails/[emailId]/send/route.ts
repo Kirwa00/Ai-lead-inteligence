@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendEmail, resendConfigured } from "@/lib/email-sender";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
+import { resolveOutreachFrom } from "@/lib/sending-domain";
 
 export const runtime = "nodejs";
 
@@ -40,8 +41,14 @@ export async function POST(
     return NextResponse.json({ error: "This lead has no contact email on file." }, { status: 400 });
   }
 
+  // Send as the workspace's own verified domain when they have one. Without it
+  // we fall back to the platform sender, which for outreach only reaches the
+  // Resend account owner's inbox — so the response flags that explicitly rather
+  // than letting the user believe a prospect was contacted.
+  const from = await resolveOutreachFrom(orgId);
+
   try {
-    await sendEmail({ to, subject: email.subject, text: email.body });
+    await sendEmail({ to, subject: email.subject, text: email.body, from });
   } catch (err) {
     console.error("[send-email] Resend error:", err);
     return NextResponse.json(
@@ -63,5 +70,12 @@ export async function POST(
       : []),
   ]);
 
-  return NextResponse.json({ ok: true, sentTo: to });
+  return NextResponse.json({
+    ok: true,
+    sentTo: to,
+    sentFrom: from,
+    // Surfaced by the UI so an unverified workspace understands why a prospect
+    // may never receive this.
+    usingPlatformSender: !from,
+  });
 }

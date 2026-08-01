@@ -27,6 +27,29 @@ model Organization {
   usageEvents        UsageEvent[]
   payments           Payment[]
   invites            Invite[]
+  sendingDomain      SendingDomain?
+}
+
+// The domain a workspace sends OUTREACH from, verified through the platform's
+// Resend account. System mail (invites, password resets) deliberately does NOT
+// use this — those come from the platform address, since a password-reset email
+// arriving from a customer's own domain would be misleading.
+model SendingDomain {
+  id               String       @id @default(cuid())
+  organizationId   String       @unique // one sending domain per workspace
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  domain           String       // e.g. "acme.com"
+  // Resend's identifier for this domain. Null if registration failed partway.
+  providerDomainId String?
+  // Mirrors Resend: not_started | pending | verified | failure | temporary_failure
+  status           String       @default("pending")
+  // DNS records the customer must publish, cached from the provider for display.
+  dnsRecords       Json?
+  fromLocalPart    String       @default("outreach") // -> outreach@acme.com
+  fromName         String?
+  lastCheckedAt    DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 }
 
 // A pending invitation for someone to join an existing Organization (workspace)

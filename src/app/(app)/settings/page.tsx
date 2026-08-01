@@ -4,6 +4,11 @@ import { microsToUsd } from "@/lib/billing";
 import { ProfileForm, ChangePasswordForm } from "@/components/ui/AccountSettings";
 import TeamSection from "@/components/ui/TeamSection";
 import DeleteWorkspace from "@/components/ui/DeleteWorkspace";
+import SendingDomainCard, {
+  type SendingDomainView,
+  type DnsRow,
+} from "@/components/ui/SendingDomainCard";
+import { resendConfigured } from "@/lib/email-sender";
 import LlmProviderToggle from "@/components/ui/LlmProviderToggle";
 import { llmProvidersAvailable, resolveLlmProvider, type LlmProvider } from "@/lib/agents/shared";
 
@@ -58,6 +63,24 @@ export default async function SettingsPage() {
   const llmAvailable = llmProvidersAvailable();
 
   const orgId = user?.organizationId;
+  const sendingDomainRow = orgId
+    ? await prisma.sendingDomain.findUnique({ where: { organizationId: orgId } })
+    : null;
+
+  const sendingDomain: SendingDomainView = sendingDomainRow
+    ? {
+        domain: sendingDomainRow.domain,
+        status: sendingDomainRow.status,
+        // Stored as Json, so narrow it back to the shape the card renders.
+        dnsRecords: Array.isArray(sendingDomainRow.dnsRecords)
+          ? (sendingDomainRow.dnsRecords as unknown as DnsRow[])
+          : [],
+        fromLocalPart: sendingDomainRow.fromLocalPart,
+        fromName: sendingDomainRow.fromName,
+        lastCheckedAt: sendingDomainRow.lastCheckedAt?.toISOString() ?? null,
+      }
+    : null;
+
   const [members, invites] = await Promise.all([
     orgId
       ? prisma.user.findMany({
@@ -113,6 +136,17 @@ export default async function SettingsPage() {
         <div className="border-t border-outline-variant mt-sm pt-md">
           <Row label="Credit Balance" value={`$${balanceUsd.toFixed(2)}`} />
         </div>
+      </Card>
+
+      <Card
+        title="Sending Domain"
+        subtitle="Send outreach from your own domain so it reaches prospects' inboxes."
+      >
+        <SendingDomainCard
+          initial={sendingDomain}
+          isOwner={isOwner}
+          resendConfigured={resendConfigured()}
+        />
       </Card>
 
       <Card title="Team" subtitle="Invite teammates and manage who has access.">
