@@ -3,10 +3,22 @@
 // in env at once — only the selected provider is used per run.
 export type LlmProvider = "anthropic" | "deepseek";
 
+const ALL_PROVIDERS: LlmProvider[] = ["anthropic", "deepseek"];
+
 const PROVIDER_ENV: Record<LlmProvider, { envVar: string; label: string }> = {
   anthropic: { envVar: "ANTHROPIC_API_KEY", label: "Anthropic API key" },
   deepseek: { envVar: "DEEPSEEK_API_KEY", label: "DeepSeek API key" },
 };
+
+/** Error carrying the upstream HTTP status so failover can reason about it. */
+class ProviderError extends Error {
+  status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "ProviderError";
+    this.status = status;
+  }
+}
 
 /** A key that is missing, blank, or whitespace-only counts as not configured. */
 function rawKey(provider: LlmProvider): string {
@@ -27,11 +39,11 @@ function rawKey(provider: LlmProvider): string {
  * decimal 8226). We reject anything outside printable ASCII, which also catches
  * non-breaking spaces and smart quotes that would otherwise fail auth silently.
  */
-function readApiKey(provider: LlmProvider): string {
+export function keyProblem(provider: LlmProvider): string | null {
   const { envVar, label } = PROVIDER_ENV[provider];
   const key = rawKey(provider);
 
-  if (!key) throw new Error(`${label} is not configured — set ${envVar}.`);
+  if (!key) return `${label} is not configured — set ${envVar}.`;
 
   // Indexed loop rather than spread: this file compiles at a pre-ES2015 target.
   let badIndex = -1;
@@ -42,20 +54,61 @@ function readApiKey(provider: LlmProvider): string {
       break;
     }
   }
+  if (badIndex === -1) return null;
 
-  if (badIndex !== -1) {
-    const cp = key.charCodeAt(badIndex);
-    const hint =
-      cp === 0x2022
-        ? " That's a bullet character, which means a masked key was copied from a dashboard — copy the real value instead."
-        : "";
-    throw new Error(
-      `${label} (${envVar}) contains a character that can't be sent in an HTTP header: ` +
-        `position ${badIndex}, code point ${cp}.${hint}`
-    );
+  const cp = key.charCodeAt(badIndex);
+  const hint =
+    cp === 0x2022
+      ? " That's a bullet character, which means a masked key was copied from a dashboard — copy the real value instead."
+      : "";
+  return (
+    `${label} (${envVar}) contains a character that can't be sent in an HTTP header: ` +
+    `position ${badIndex}, code point ${cp}.${hint}`
+  );
+}
+
+function readApiKey(provider: LlmProvider): string {
+  const problem = keyProblem(provider);
+  if (problem) throw new Error(problem);
+  return rawKey(provider);
+}
+
+/** Providers whose key is present and structurally sendable. */
+export function usableProviders(): LlmProvider[] {
+  return ALL_PROVIDERS.filter((p) => keyProblem(p) === null);
+}
+
+/**
+ * Preferred provider first, then any other usable one as a fallback. A key that
+ * can't even be put in a header is skipped without spending a network call.
+ */
+function providerOrder(preferred?: LlmProvider | string | null): LlmProvider[] {
+  const usable = usableProviders();
+  const explicit = normalizeProvider(preferred ?? process.env.LLM_PROVIDER);
+  if (explicit && usable.indexOf(explicit) !== -1) {
+    return [explicit].concat(usable.filter((p) => p !== explicit));
   }
+  return usable;
+}
 
-  return key;
+/**
+ * Nothing is callable. Report the requested provider's problem when it has one,
+ * so the message points at the key the user actually meant to use.
+ */
+function noUsableProviderError(preferred?: LlmProvider | string | null): Error {
+  const explicit = normalizeProvider(preferred ?? process.env.LLM_PROVIDER);
+  const ordered = explicit ? [explicit].concat(ALL_PROVIDERS.filter((p) => p !== explicit)) : ALL_PROVIDERS;
+  const problems = ordered.map(keyProblem).filter((p): p is string => !!p);
+  return new Error(problems[0] ?? "No AI provider is configured.");
+}
+
+/** Auth/permission/quota failures mean "this key won't work" — try the other. */
+function shouldFailOver(err: unknown): boolean {
+  const status = (err as { status?: number } | null)?.status;
+  if (typeof status === "number") return status === 401 || status === 403 || status === 429 || status >= 500;
+  // A structural key problem is caught before any call, so anything else here
+  // (bad JSON, malformed request) would fail identically on the other provider.
+  return false;
 }
 
 function normalizeProvider(value?: string | null): LlmProvider | null {
@@ -65,13 +118,13 @@ function normalizeProvider(value?: string | null): LlmProvider | null {
   return null;
 }
 
+/**
+ * The provider that will actually be tried first. A workspace's choice is
+ * honoured whenever its key is usable; otherwise we transparently fall back to
+ * one that is, so a single broken key can't take the agents offline.
+ */
 export function resolveLlmProvider(preferred?: string | null): LlmProvider {
-  const explicit = normalizeProvider(preferred ?? process.env.LLM_PROVIDER);
-  if (explicit && rawKey(explicit)) return explicit;
-
-  if (rawKey("deepseek")) return "deepseek";
-  if (rawKey("anthropic")) return "anthropic";
-  return "anthropic";
+  return providerOrder(preferred)[0] ?? "anthropic";
 }
 
 export function getAgentModel(provider?: LlmProvider | string | null): string {
@@ -87,17 +140,21 @@ export const TX_OPTS = { maxWait: 15_000, timeout: 30_000 } as const;
 
 export type Usage = { input_tokens: number; output_tokens: number };
 
-/** Which providers have server-side API keys configured. */
+/**
+ * Which providers are actually callable. A key that's present but malformed
+ * counts as unavailable — it would fail on first use, so offering it in
+ * Settings would just be a trap.
+ */
 export function llmProvidersAvailable(): Record<LlmProvider, boolean> {
   return {
-    anthropic: !!rawKey("anthropic"),
-    deepseek: !!rawKey("deepseek"),
+    anthropic: keyProblem("anthropic") === null,
+    deepseek: keyProblem("deepseek") === null,
   };
 }
 
-/** True once the given provider has a key configured. */
+/** True when at least one provider can serve this request. */
 export function llmConfigured(provider?: LlmProvider | string | null): boolean {
-  return !!rawKey(resolveLlmProvider(provider));
+  return providerOrder(provider).length > 0;
 }
 
 /**
@@ -111,13 +168,36 @@ export async function callAgentJson<T>(
   maxTokens = 3000,
   provider?: LlmProvider | string | null
 ): Promise<{ result: T; usage: Usage; model: string }> {
-  const p = resolveLlmProvider(provider);
-  const model = getAgentModel(p);
-  const { result, usage } =
-    p === "deepseek"
-      ? await callDeepSeek<T>(prompt, schema, maxTokens, model)
-      : await callAnthropic<T>(prompt, schema, maxTokens, model);
-  return { result, usage, model };
+  const order = providerOrder(provider);
+  if (order.length === 0) throw noUsableProviderError(provider);
+
+  let lastError: unknown;
+
+  for (let i = 0; i < order.length; i += 1) {
+    const p = order[i];
+    const model = getAgentModel(p);
+    try {
+      const { result, usage } =
+        p === "deepseek"
+          ? await callDeepSeek<T>(prompt, schema, maxTokens, model)
+          : await callAnthropic<T>(prompt, schema, maxTokens, model);
+
+      if (i > 0) {
+        console.warn(`[llm] fell back to ${p} after ${order[0]} failed — check that key.`);
+      }
+      // Report the model actually used, so metering bills the right rate.
+      return { result, usage, model };
+    } catch (err) {
+      lastError = err;
+      const isLast = i === order.length - 1;
+      if (isLast || !shouldFailOver(err)) throw err;
+      console.warn(
+        `[llm] ${p} rejected the request (${err instanceof Error ? err.message : err}); trying the next provider.`
+      );
+    }
+  }
+
+  throw lastError;
 }
 
 async function callDeepSeek<T>(
@@ -151,7 +231,10 @@ async function callDeepSeek<T>(
       ],
     }),
   });
-  if (!res.ok) throw new Error(`DeepSeek ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new ProviderError(`DeepSeek ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`, res.status);
+  }
   const data = await res.json();
   const usage: Usage = {
     input_tokens: data.usage?.prompt_tokens ?? 0,
@@ -183,7 +266,10 @@ async function callAnthropic<T>(
       messages: [{ role: "user", content: prompt }],
     }),
   });
-  if (!res.ok) throw new Error(`Anthropic ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new ProviderError(`Anthropic ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`, res.status);
+  }
   const data = await res.json();
   const usage: Usage = data.usage ?? { input_tokens: 0, output_tokens: 0 };
   const textBlock = (data.content as Array<{ type: string; text?: string }>)?.find(
