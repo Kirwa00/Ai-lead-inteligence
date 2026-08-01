@@ -3,6 +3,61 @@
 // in env at once — only the selected provider is used per run.
 export type LlmProvider = "anthropic" | "deepseek";
 
+const PROVIDER_ENV: Record<LlmProvider, { envVar: string; label: string }> = {
+  anthropic: { envVar: "ANTHROPIC_API_KEY", label: "Anthropic API key" },
+  deepseek: { envVar: "DEEPSEEK_API_KEY", label: "DeepSeek API key" },
+};
+
+/** A key that is missing, blank, or whitespace-only counts as not configured. */
+function rawKey(provider: LlmProvider): string {
+  return (process.env[PROVIDER_ENV[provider].envVar] ?? "").trim();
+}
+
+/**
+ * Reads an API key for outbound use, tolerating the stray whitespace and
+ * newlines that copy-paste leaves behind, and rejecting anything that cannot
+ * legally travel in an HTTP header.
+ *
+ * HTTP header values are a ByteString, so any code point above 255 makes
+ * `fetch` throw "Cannot convert argument to a ByteString because the character
+ * at index N has a value of X" — an error that names neither the offending key
+ * nor the reason, and which then gets persisted as an agent job's failure
+ * message. The overwhelmingly common cause is pasting a *masked* key straight
+ * out of a provider dashboard, where the hidden characters are bullets (U+2022,
+ * decimal 8226). We reject anything outside printable ASCII, which also catches
+ * non-breaking spaces and smart quotes that would otherwise fail auth silently.
+ */
+function readApiKey(provider: LlmProvider): string {
+  const { envVar, label } = PROVIDER_ENV[provider];
+  const key = rawKey(provider);
+
+  if (!key) throw new Error(`${label} is not configured — set ${envVar}.`);
+
+  // Indexed loop rather than spread: this file compiles at a pre-ES2015 target.
+  let badIndex = -1;
+  for (let i = 0; i < key.length; i += 1) {
+    const cp = key.charCodeAt(i);
+    if (cp < 0x20 || cp > 0x7e) {
+      badIndex = i;
+      break;
+    }
+  }
+
+  if (badIndex !== -1) {
+    const cp = key.charCodeAt(badIndex);
+    const hint =
+      cp === 0x2022
+        ? " That's a bullet character, which means a masked key was copied from a dashboard — copy the real value instead."
+        : "";
+    throw new Error(
+      `${label} (${envVar}) contains a character that can't be sent in an HTTP header: ` +
+        `position ${badIndex}, code point ${cp}.${hint}`
+    );
+  }
+
+  return key;
+}
+
 function normalizeProvider(value?: string | null): LlmProvider | null {
   const p = (value || "").toLowerCase();
   if (p === "deepseek") return "deepseek";
@@ -12,11 +67,10 @@ function normalizeProvider(value?: string | null): LlmProvider | null {
 
 export function resolveLlmProvider(preferred?: string | null): LlmProvider {
   const explicit = normalizeProvider(preferred ?? process.env.LLM_PROVIDER);
-  if (explicit === "deepseek" && !!process.env.DEEPSEEK_API_KEY) return "deepseek";
-  if (explicit === "anthropic" && !!process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (explicit && rawKey(explicit)) return explicit;
 
-  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
-  if (process.env.ANTHROPIC_API_KEY) return "anthropic";
+  if (rawKey("deepseek")) return "deepseek";
+  if (rawKey("anthropic")) return "anthropic";
   return "anthropic";
 }
 
@@ -36,15 +90,14 @@ export type Usage = { input_tokens: number; output_tokens: number };
 /** Which providers have server-side API keys configured. */
 export function llmProvidersAvailable(): Record<LlmProvider, boolean> {
   return {
-    anthropic: !!process.env.ANTHROPIC_API_KEY,
-    deepseek: !!process.env.DEEPSEEK_API_KEY,
+    anthropic: !!rawKey("anthropic"),
+    deepseek: !!rawKey("deepseek"),
   };
 }
 
 /** True once the given provider has a key configured. */
 export function llmConfigured(provider?: LlmProvider | string | null): boolean {
-  const p = resolveLlmProvider(provider);
-  return p === "deepseek" ? !!process.env.DEEPSEEK_API_KEY : !!process.env.ANTHROPIC_API_KEY;
+  return !!rawKey(resolveLlmProvider(provider));
 }
 
 /**
@@ -73,10 +126,11 @@ async function callDeepSeek<T>(
   maxTokens: number,
   model: string
 ): Promise<{ result: T; usage: Usage }> {
+  const apiKey = readApiKey("deepseek");
   const res = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
     },
     body: JSON.stringify({
@@ -113,10 +167,11 @@ async function callAnthropic<T>(
   maxTokens: number,
   model: string
 ): Promise<{ result: T; usage: Usage }> {
+  const apiKey = readApiKey("anthropic");
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      "x-api-key": process.env.ANTHROPIC_API_KEY as string,
+      "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
