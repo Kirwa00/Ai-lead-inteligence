@@ -18,7 +18,6 @@ export default function OnboardingChecklist({
     { label: "Send your first outreach email", href: "/campaigns", done: hasEmailSent },
   ];
 
-  const doneCount = steps.filter((s) => s.done).length;
   const nextStep = steps.find((s) => !s.done);
   const onboardingState = getOnboardingState({ hasCampaign, hasLeads, hasEmailSent });
 

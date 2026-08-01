@@ -58,7 +58,6 @@ export function getOnboardingState({
 export function getQuickStartState({
   hasCampaign,
   hasLeads,
-  hasEmailSent,
 }: {
   hasCampaign: boolean;
   hasLeads: boolean;
