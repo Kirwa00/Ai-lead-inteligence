@@ -7,6 +7,15 @@ import { rateLimit, tooMany } from "@/lib/rate-limit";
 import { callAgentJson, llmConfigured } from "@/lib/agents/shared";
 import { getOrgLlmProvider } from "@/lib/llm-provider";
 
+export const runtime = "nodejs";
+
+/**
+ * This route awaits the LLM call inline (~20s), which overruns Vercel's default
+ * 10s/15s function limit and returns a 504 in production while working fine
+ * locally, where nothing times out.
+ */
+export const maxDuration = 60;
+
 const requestSchema = z.object({
   industry: z.string().min(1).max(100),
   geography: z.string().max(100).default("East Africa"),

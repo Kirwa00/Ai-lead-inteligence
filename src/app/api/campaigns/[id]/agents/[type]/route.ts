@@ -6,10 +6,23 @@ import { getBalanceMicros } from "@/lib/wallet";
 import { RESEARCH_RUN_RESERVE_MICROS } from "@/lib/billing";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
 import { AGENTS } from "@/lib/agents";
+import { IN_FLIGHT_STATUSES, isStale, staleCutoff } from "@/lib/agents/job-staleness";
 import { llmConfigured } from "@/lib/agents/shared";
 import { getOrgLlmProvider } from "@/lib/llm-provider";
 
 export const runtime = "nodejs";
+
+/**
+ * Vercel defaults serverless functions to 10s (Hobby) / 15s (Pro), and that
+ * ceiling applies to waitUntil work too — it extends past the response, but not
+ * past the function's lifetime. A research run takes ~20s, so on the default
+ * the platform killed the function mid-run: no exception, no catch block, the
+ * job row stuck at "running" forever and the UI polled a spinner that never
+ * resolved. Worked locally only because there is no timeout there.
+ *
+ * 60s is the Hobby ceiling and well inside Pro's, so it's safe on either.
+ */
+export const maxDuration = 60;
 
 // Queue a campaign-scoped agent run; return 202 immediately, work runs in the
 // background (waitUntil), poll via GET. See ai-agent-build-playbook.
@@ -46,10 +59,30 @@ export async function POST(_req: Request, { params }: { params: { id: string; ty
     }
   }
 
+  // Dedupe concurrent runs — but only against jobs that could still be alive.
+  // Without the age bound, one killed function would leave a "running" row that
+  // this check kept returning forever, permanently blocking the agent.
+  const cutoff = staleCutoff();
   const inFlight = await prisma.agentJob.findFirst({
-    where: { campaignId: campaign.id, agentType: params.type, status: { in: ["queued", "running"] } },
+    where: {
+      campaignId: campaign.id,
+      agentType: params.type,
+      status: { in: [...IN_FLIGHT_STATUSES] },
+      createdAt: { gt: cutoff },
+    },
   });
   if (inFlight) return NextResponse.json({ jobId: inFlight.id, status: inFlight.status }, { status: 202 });
+
+  // Any older in-flight rows belong to functions that no longer exist.
+  await prisma.agentJob.updateMany({
+    where: {
+      campaignId: campaign.id,
+      agentType: params.type,
+      status: { in: [...IN_FLIGHT_STATUSES] },
+      createdAt: { lte: cutoff },
+    },
+    data: { status: "failed", error: "The run timed out and was stopped.", completedAt: new Date() },
+  });
 
   const job = await prisma.agentJob.create({
     data: { campaignId: campaign.id, organizationId: orgId, agentType: params.type, status: "running" },
@@ -107,5 +140,22 @@ export async function GET(req: Request, { params }: { params: { id: string; type
     orderBy: { createdAt: "desc" },
   });
   if (!job) return NextResponse.json({ status: "none" });
+
+  // If the platform killed the function mid-run, nothing ever wrote a terminal
+  // status — the row would sit at "running" forever and the client would poll
+  // indefinitely. Reap it here so the failure is visible and retryable.
+  const inFlight = (IN_FLIGHT_STATUSES as readonly string[]).includes(job.status);
+  if (inFlight && isStale(job.createdAt)) {
+    const reaped = await prisma.agentJob.update({
+      where: { id: job.id },
+      data: {
+        status: "failed",
+        error: "The run timed out and was stopped. Try again — if it keeps happening, the campaign may be too broad.",
+        completedAt: new Date(),
+      },
+    });
+    return NextResponse.json({ jobId: reaped.id, status: reaped.status, error: reaped.error });
+  }
+
   return NextResponse.json({ jobId: job.id, status: job.status, summary: job.summary, error: job.error });
 }
