@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { microsToUsd } from "@/lib/billing";
 import { ProfileForm, ChangePasswordForm } from "@/components/ui/AccountSettings";
 import TeamSection from "@/components/ui/TeamSection";
+import DeleteWorkspace from "@/components/ui/DeleteWorkspace";
 import LlmProviderToggle from "@/components/ui/LlmProviderToggle";
 import { llmProvidersAvailable, resolveLlmProvider, type LlmProvider } from "@/lib/agents/shared";
 
@@ -41,6 +42,7 @@ export default async function SettingsPage() {
           email: true,
           role: true,
           createdAt: true,
+          emailVerified: true,
           organizationId: true,
           organization: {
             select: { name: true, slug: true, plan: true, creditBalanceMicros: true, llmProvider: true },
@@ -84,6 +86,10 @@ export default async function SettingsPage() {
           <ProfileForm initialName={user?.name ?? ""} />
           <div className="border-t border-outline-variant pt-md">
             <Row label="Email" value={user?.email ?? "—"} />
+            <Row
+              label="Email Status"
+              value={user?.emailVerified ? "Verified" : "Not verified"}
+            />
             <Row label="Role" value={user?.role ?? "—"} />
             <Row
               label="Member Since"
@@ -109,9 +115,10 @@ export default async function SettingsPage() {
         </div>
       </Card>
 
-      <Card title="Team" subtitle="Invite teammates to this workspace.">
+      <Card title="Team" subtitle="Invite teammates and manage who has access.">
         <TeamSection
           isOwner={isOwner}
+          currentUserId={userId ?? ""}
           members={members.map((m) => ({ ...m, createdAt: m.createdAt.toISOString() }))}
           invites={invites.map((i) => ({
             id: i.id,
@@ -122,6 +129,20 @@ export default async function SettingsPage() {
           }))}
         />
       </Card>
+
+      {isOwner && org && (
+        <div className="bg-surface-container-low border border-error/30 rounded-xl overflow-hidden">
+          <div className="px-lg py-md border-b border-error/30 bg-surface-container-lowest">
+            <h2 className="text-headline-sm font-semibold text-error">Danger Zone</h2>
+            <p className="text-body-sm text-on-surface-variant mt-xs">
+              Irreversible actions. Please be certain.
+            </p>
+          </div>
+          <div className="p-lg">
+            <DeleteWorkspace orgName={org.name} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

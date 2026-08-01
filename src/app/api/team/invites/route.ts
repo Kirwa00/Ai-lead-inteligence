@@ -1,20 +1,10 @@
-import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { generateInviteToken, INVITE_TTL_MS } from "@/lib/invites";
 import { sendEmail, resendConfigured } from "@/lib/email-sender";
 import { rateLimit, tooMany } from "@/lib/rate-limit";
-
-async function requireOwner() {
-  const session = await auth();
-  const user = session?.user as { id?: string; organizationId?: string; role?: string } | undefined;
-  if (!user?.organizationId) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  if (user.role !== "owner") {
-    return { error: NextResponse.json({ error: "Only the workspace owner can manage the team." }, { status: 403 }) };
-  }
-  return { orgId: user.organizationId, userId: user.id };
-}
+import { requireOwner } from "@/lib/team";
 
 export async function GET() {
   const ctx = await requireOwner();

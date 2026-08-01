@@ -1,17 +1,13 @@
-import { auth } from "@/auth";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireOwner } from "@/lib/team";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const session = await auth();
-  const user = session?.user as { organizationId?: string; role?: string } | undefined;
-  if (!user?.organizationId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (user.role !== "owner") {
-    return NextResponse.json({ error: "Only the workspace owner can manage the team." }, { status: 403 });
-  }
+  const ctx = await requireOwner();
+  if ("error" in ctx) return ctx.error;
 
   const invite = await prisma.invite.findFirst({
-    where: { id: params.id, organizationId: user.organizationId },
+    where: { id: params.id, organizationId: ctx.orgId },
   });
   if (!invite) return NextResponse.json({ error: "Invite not found" }, { status: 404 });
 
