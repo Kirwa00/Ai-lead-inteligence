@@ -4,6 +4,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, FormEvent } from "react";
 import Link from "next/link";
+import GoogleSignInButton from "@/components/ui/GoogleSignInButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -73,16 +74,24 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-xs">
-              <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="font-mono text-label-sm text-on-surface-variant uppercase tracking-widest">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="font-mono text-label-sm text-primary hover:underline"
+                >
+                  Forgot?
+                </Link>
+              </div>
               <input
                 name="password"
                 type="password"
                 required
                 autoComplete="current-password"
                 className="w-full bg-surface-container-high border border-outline-variant text-on-surface text-body-sm px-md py-sm rounded-xl focus:outline-none focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant"
-                placeholder="••••••••"
+                placeholder="Your password"
               />
             </div>
 
@@ -106,6 +115,8 @@ export default function LoginPage() {
               {loading ? "Signing in…" : "Sign In"}
             </button>
           </form>
+
+          <GoogleSignInButton />
 
           <div className="mt-lg pt-lg border-t border-outline-variant">
             <p className="text-center text-body-sm text-on-surface-variant">
