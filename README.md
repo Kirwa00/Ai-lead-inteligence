@@ -1,3 +1,11 @@
+A1 Lead Intelligence — a SaaS tool for marketers to find, qualify, and reach out to leads via an AI agent workforce.
+
+Project design and plans:
+
+- [Product spec](docs/PRODUCT_SPEC.md) — vision, users, MVP scope, monetisation
+- [Architecture](docs/ARCHITECTURE.md) — stack, data model, agent framework, billing flow
+- [SDLC status & roadmap](docs/SDLC_STATUS.md) — delivered milestones and the path to launch
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
