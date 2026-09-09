@@ -18,7 +18,7 @@ const AGENT_LIST = [
   { type: "research", name: "Research Agent", icon: "travel_explore", description: "Discovers matching companies from web & directories. Runs first." },
   { type: "qualification", name: "Qualification Agent", icon: "verified", description: "Scores and ranks companies against your ICP." },
   { type: "contact_discovery", name: "Contact Discovery Agent", icon: "contacts", description: "Finds decision-makers and their emails." },
-  { type: "email_verification", name: "Email Verification Agent", icon: "mark_email_read", description: "Validates emails before sending (no AI credits used)." },
+  { type: "email_verification", name: "Email Verification Agent", icon: "mark_email_read", description: "Checks emails are deliverable before sending." },
   { type: "outreach", name: "Outreach Agent", icon: "send", description: "Writes personalised outreach messages." },
   { type: "followup", name: "Follow-up Agent", icon: "reply_all", description: "Automates intelligent follow-up sequences." },
   { type: "reporting", name: "Reporting Agent", icon: "assessment", description: "Summarises campaign performance with recommendations." },

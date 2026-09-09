@@ -50,12 +50,12 @@ export const AGENTS: Record<string, AgentDef> = {
   },
   contact_discovery: {
     label: "Contact Discovery Agent",
-    description: "Find a likely decision-maker for each lead company.",
+    description: "Find a decision-maker for each lead company — from verified data sources when configured, AI otherwise.",
     run: runContactDiscovery,
   },
   email_verification: {
     label: "Email Verification Agent",
-    description: "Validate contact emails (no AI credits used).",
+    description: "Check contact emails for deliverability (live mailbox checks when configured, heuristics otherwise).",
     run: runEmailVerification,
     usesLlm: false,
   },

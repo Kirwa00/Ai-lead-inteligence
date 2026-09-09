@@ -13,6 +13,7 @@
 | **Phase 2: Monetisation** | Jul 23 – 24 | Prepaid value wallet (7× markup), free grant, Stripe + Flutterwave sandbox top-ups, billing page, metering |
 | **AI workforce** | Jul 24 | Agent framework generalised, background jobs, all 7 agents wired & verified, research 40% faster |
 | **Team & sending** | Jul 26 | Resend outreach sending, team invites, mobile sidebar, real per-org dashboard data, DeepSeek provider toggle |
+| **Phase 3: Trustworthy data** | Sep 9 | Apollo + Hunter behind Contact Discovery (real decision-makers, provider email status) and Email Verification (live deliverability); env-gated with LLM/heuristic fallback; flat per-lookup wallet metering |
 | **Hardening sprint** | Jul 31 – Aug 1 | Onboarding UX, email verification, password reset, Google sign-in, member removal / ownership transfer / workspace deletion, per-workspace sending domain, Vercel agent-timeout fix, provider fallback |
 
 **Current status: feature-complete private beta.** Deployed at
@@ -21,11 +22,10 @@ launch yet.
 
 ## 2. Proposed roadmap to launch
 
-### Phase 3 — Trustworthy data (highest impact)
-The weakest link: leads/contacts come from LLM knowledge, so emails may be
-guessed. Integrate a real data provider (e.g. Apollo/Hunter) behind the
-existing Contact Discovery + Email Verification agents; keep the LLM for
-qualification and drafting where it's strong.
+### Phase 3 — Trustworthy data — DONE (code); needs keys
+Apollo (`APOLLO_API_KEY`) and Hunter (`HUNTER_API_KEY`) are wired behind
+Contact Discovery + Email Verification. Set the keys in Vercel and tune
+`*_RAW_MICROS` to your provider plan so the markup holds.
 
 ### Phase 4 — Production payments
 - Switch Stripe + Flutterwave to live keys; verify webhook signatures in

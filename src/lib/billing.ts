@@ -68,6 +68,27 @@ export function computeChargeMicros(
   return BigInt(Math.ceil(raw * USAGE_MARKUP_MULTIPLIER));
 }
 
+/**
+ * Raw cost of one contact-data lookup, in micro-USD. Providers bill in credits
+ * whose USD value depends on the plan, so these are overridable per deployment.
+ * Defaults: Apollo people search ~$0.03, Hunter domain search ~$0.02, Hunter
+ * verifier ~$0.01. Charged to the wallet at the usual markup.
+ */
+export const PROVIDER_LOOKUP_RAW_MICROS: Record<string, bigint> = {
+  "apollo/people-search": BigInt(process.env.APOLLO_LOOKUP_RAW_MICROS ?? 30_000),
+  "hunter/domain-search": BigInt(process.env.HUNTER_LOOKUP_RAW_MICROS ?? 20_000),
+  "hunter/email-verifier": BigInt(process.env.HUNTER_VERIFY_RAW_MICROS ?? 10_000),
+};
+
+export function providerLookupRawMicros(lookup: string): bigint {
+  return PROVIDER_LOOKUP_RAW_MICROS[lookup] ?? BigInt(30_000);
+}
+
+/** Value charged to the wallet for a flat raw cost. */
+export function flatChargeMicros(rawMicros: bigint): bigint {
+  return BigInt(Math.ceil(Number(rawMicros) * USAGE_MARKUP_MULTIPLIER));
+}
+
 export function microsToUsd(micros: bigint): number {
   return Number(micros) / 1_000_000;
 }
