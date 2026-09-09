@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { computeRawCostMicros, computeChargeMicros } from "@/lib/billing";
+import { computeRawCostMicros, computeChargeMicros, flatChargeMicros, providerLookupRawMicros } from "@/lib/billing";
 import type { Prisma } from "@prisma/client";
 
 /** Any client that can run the writes — the shared prisma client or a $transaction tx. */
@@ -89,6 +89,66 @@ export async function debitForUsage(
         model: input.model,
         inputTokens: input.inputTokens,
         outputTokens: input.outputTokens,
+        rawCostMicros,
+        walletTransactionId: wtx.id,
+      },
+    });
+    return org.creditBalanceMicros;
+  });
+
+  return { chargeMicros, rawCostMicros, balanceMicros };
+}
+
+export type LookupMeterInput = {
+  organizationId: string;
+  userId?: string | null;
+  feature: string;
+  agentType?: string | null;
+  /** e.g. "apollo/people-search" — stored in UsageEvent.model. */
+  lookup: string;
+  /** Number of successful lookups to bill. */
+  count: number;
+};
+
+/**
+ * Debit the wallet for `count` contact-data provider lookups at a flat rate.
+ * Same atomic shape as debitForUsage; the usage event records the lookup kind
+ * in `model` and the count in `inputTokens` so margin stays auditable.
+ */
+export async function debitForLookups(
+  input: LookupMeterInput
+): Promise<{ chargeMicros: bigint; rawCostMicros: bigint; balanceMicros: bigint }> {
+  const n = BigInt(Math.max(0, Math.floor(input.count)));
+  const rawCostMicros = providerLookupRawMicros(input.lookup) * n;
+  const chargeMicros = flatChargeMicros(rawCostMicros);
+  if (chargeMicros === BigInt(0)) {
+    return { chargeMicros, rawCostMicros, balanceMicros: await getBalanceMicros(input.organizationId) };
+  }
+
+  const balanceMicros = await prisma.$transaction(async (tx) => {
+    const org = await tx.organization.update({
+      where: { id: input.organizationId },
+      data: { creditBalanceMicros: { decrement: chargeMicros } },
+      select: { creditBalanceMicros: true },
+    });
+    const wtx = await tx.walletTransaction.create({
+      data: {
+        organizationId: input.organizationId,
+        type: "debit",
+        amountMicros: -chargeMicros,
+        balanceAfterMicros: org.creditBalanceMicros,
+        description: `${input.feature} · ${input.lookup} × ${input.count}`,
+      },
+    });
+    await tx.usageEvent.create({
+      data: {
+        organizationId: input.organizationId,
+        userId: input.userId ?? null,
+        feature: input.feature,
+        agentType: input.agentType ?? null,
+        model: input.lookup,
+        inputTokens: input.count,
+        outputTokens: 0,
         rawCostMicros,
         walletTransactionId: wtx.id,
       },
